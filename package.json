@@ -1,0 +1,25 @@
+{
+  "name": "synod-llm-council",
+  "version": "1.0.0",
+  "description": "Synod - a production-ready, mocks-first LLM Council application implementing FRD v1.3.",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "start": "node backend/app.js",
+    "dev": "node backend/app.js",
+    "migrate": "node backend/db/sqlite.js migrate",
+    "seed": "node scripts/seed-default-councils.js",
+    "test": "node --test tests/unit/*.test.js tests/integration/*.test.js"
+  },
+  "engines": {
+    "node": ">=22"
+  },
+  "dependencies": {
+    "cors": "^2.8.5",
+    "dotenv": "^16.4.7",
+    "express": "^4.21.2"
+  },
+  "devDependencies": {
+    "supertest": "^7.0.0"
+  }
+}

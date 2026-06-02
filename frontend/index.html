@@ -1,0 +1,131 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Synod Dashboard</title>
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='16' fill='%232563eb'/%3E%3Ctext x='32' y='41' text-anchor='middle' font-size='30' font-family='Arial' font-weight='700' fill='%23ffffff'%3ES%3C/text%3E%3C/svg%3E" />
+  <link rel="stylesheet" href="/style.css" />
+  <!-- Lucide Icons -->
+  <script src="https://unpkg.com/lucide@latest"></script>
+</head>
+<body>
+  <div class="aurora"></div>
+  <main class="shell">
+    <header class="topbar glass">
+      <div class="brand">
+        <div class="logo">S</div>
+        <div>
+          <h1 data-i18n="brand_title">Synod Council</h1>
+          <p data-i18n="brand_subtitle">Compact multi-LLM deliberation for decisions that deserve scrutiny.</p>
+        </div>
+      </div>
+      <nav style="display: flex; align-items: center; gap: 8px;">
+        <select id="langToggle" style="margin-right: 16px; padding: 6px 10px; border-radius: 8px; border: 1px solid var(--border); background: rgba(255,255,255,0.5);">
+          <option value="en">English</option>
+          <option value="mr">मराठी (Marathi)</option>
+          <option value="hi">हिंदी (Hindi)</option>
+          <option value="ru">Русский (Russian)</option>
+          <option value="nl">Nederlands (Dutch)</option>
+          <option value="ar">العربية (Arabic)</option>
+          <option value="es">Español (Spanish)</option>
+          <option value="de">Deutsch (German)</option>
+        </select>
+        <button class="tab active" data-tab="dashboard" data-i18n="tab_dashboard"><i data-lucide="layout-dashboard" style="width: 18px; height: 18px;"></i> Dashboard</button>
+        <button class="tab" data-tab="history" data-i18n="tab_history"><i data-lucide="history" style="width: 18px; height: 18px;"></i> History</button>
+        <button class="tab" data-tab="councils" data-i18n="tab_councils"><i data-lucide="users" style="width: 18px; height: 18px;"></i> Councils</button>
+      </nav>
+    </header>
+
+    <section id="dashboard" class="tabPanel grid">
+      <form id="sessionForm" class="glass panel composer">
+        <h2 data-i18n="start_delib"><i data-lucide="play-circle" style="width: 20px; height: 20px; vertical-align: middle; margin-right: 6px;"></i> Start a Deliberation</h2>
+        <textarea id="topic" maxlength="2000">Should we adopt a multi-region deployment for the new product launch?</textarea>
+        <div class="fields">
+          <label><span data-i18n="mode">Mode</span><select id="mode"><option data-i18n="opt_standard">standard</option><option data-i18n="opt_fast">fast</option><option data-i18n="opt_deep">deep</option></select></label>
+          <label><span data-i18n="rounds">Rounds</span><select id="rounds"><option>1</option><option>2</option><option>3</option><option selected>4</option><option>5</option></select></label>
+          <label><span data-i18n="council">Council</span><select id="councilSelect"><option value="">Dynamic council</option></select></label>
+        </div>
+        <div class="toggles">
+          <label><input id="compact" type="checkbox" checked /> <span data-i18n="compact_internal">Compact internal communication</span></label>
+          <label><input id="web" type="checkbox" checked /> <span data-i18n="web_search">Web search</span></label>
+          <label><input id="rag" type="checkbox" checked /> <span data-i18n="rag">RAG</span></label>
+        </div>
+        <button class="primary" data-i18n="convene"><i data-lucide="zap"></i> Convene Synod</button>
+      </form>
+
+      <aside class="glass panel">
+        <h2 data-i18n="sessions"><i data-lucide="clock" style="width: 20px; height: 20px; vertical-align: middle; margin-right: 6px;"></i> Sessions</h2>
+        <div id="sessions" class="stack"></div>
+      </aside>
+
+      <section class="glass panel wide">
+        <div class="sectionHead">
+          <h2 data-i18n="live_council"><i data-lucide="activity" style="width: 20px; height: 20px; vertical-align: middle; margin-right: 6px;"></i> Live Council</h2>
+          <a id="transcript" class="button disabled" data-i18n="transcript"><i data-lucide="file-text"></i> Transcript</a>
+        </div>
+        <div id="verdict"></div>
+        <div class="metrics">
+          <div><small data-i18n="status">Status</small><strong id="status" data-i18n="idle">Idle</strong></div>
+          <div><small data-i18n="round">Round</small><strong id="round">-</strong></div>
+          <div><small data-i18n="consensus">Consensus</small><strong id="consensus">-</strong></div>
+          <div><small data-i18n="internal">Internal</small><strong id="internal">Compact</strong></div>
+        </div>
+        <div id="loader" class="loader hidden">
+          <span class="dot"></span><span class="dot"></span><span class="dot"></span> <span data-i18n="thinking">Thinking...</span>
+        </div>
+        <div id="messages" class="messages"></div>
+      </section>
+    </section>
+
+    <section id="councils" class="tabPanel grid hidden">
+      <section class="glass panel">
+        <h2 data-i18n="static_councils"><i data-lucide="users" style="width: 20px; height: 20px; vertical-align: middle; margin-right: 6px;"></i> Static Councils</h2>
+        <div id="councilList" class="stack"></div>
+        <button id="importCouncil" data-i18n="import_council"><i data-lucide="download"></i> Import Current Session</button>
+      </section>
+      <form id="councilForm" class="glass panel wide">
+        <h2 data-i18n="council_builder"><i data-lucide="wrench" style="width: 20px; height: 20px; vertical-align: middle; margin-right: 6px;"></i> Council Builder</h2>
+        <div class="fields">
+          <label><span data-i18n="name">Name</span><input id="councilName" value="AnythingLLM Full Council" /></label>
+          <label><span data-i18n="description">Description</span><input id="councilDescription" value="Fully integrated council using the 4 local AnythingLLM workspaces." /></label>
+          <label><span data-i18n="veto_roles">Veto roles</span><input id="vetoRoles" value="" /></label>
+        </div>
+        <label><span data-i18n="overrides">Model overrides JSON</span><textarea id="modelOverrides">{"SYNTHESIST":"anythingllm","DOMAIN_EXPERT":"anythingllm","ETHICIST":"anythingllm","RISK_OFFICER":"anythingllm"}</textarea></label>
+        <label><span data-i18n="manifest">Role manifest JSON</span><textarea id="manifest">[
+  {"role_type":"SYNTHESIST","display_name":"Lead Synthesist","priority":1,"knowledge_source_type":"HYBRID","workspace_id":"llm-council-lead-synthesist","confidence_weight":1.2},
+  {"role_type":"DOMAIN_EXPERT","display_name":"Domain Expert","priority":2,"knowledge_source_type":"RAG","workspace_id":"llm-council-domain-expert","confidence_weight":1},
+  {"role_type":"ETHICIST","display_name":"Policy Reviewer","priority":3,"knowledge_source_type":"RAG","workspace_id":"llm-council-policy-reviewer","confidence_weight":1},
+  {"role_type":"RISK_OFFICER","display_name":"Risk Officer","priority":4,"knowledge_source_type":"RAG","workspace_id":"llm-council-risk-officer","confidence_weight":1}
+]</textarea></label>
+        <div id="workspacePreview" class="hint">Workspace validation preview appears here.</div>
+        <button class="primary" data-i18n="save"><i data-lucide="save"></i> Save Council</button>
+      </form>
+    </section>
+
+    <section id="history" class="tabPanel hidden glass panel wide">
+      <h2 data-i18n="full_history"><i data-lucide="history" style="width: 20px; height: 20px; vertical-align: middle; margin-right: 6px;"></i> Full History</h2>
+      <p class="muted" data-i18n="history_desc">Browse all past deliberations and expand them to read the full LLM responses.</p>
+      <div id="historyList" class="stack" style="margin-top: 24px;"></div>
+    </section>
+  </main>
+  
+  <div id="avatarBackdrop"></div>
+  
+  <div id="avatarContainer" class="state-welcome">
+    <video id="avatarVideo" loop muted playsinline src="https://res.cloudinary.com/dnxsyymiq/video/upload/v1780135364/hailuo-2_3_Create_a_seamless_10-second_looping_video_of_a_professional_businesswoman_speaki-0_jjklzx.mp4"></video>
+    <div id="avatarPlayOverlay">
+      <i data-lucide="play" style="width: 48px; height: 48px;"></i>
+      <span>Click to Begin</span>
+    </div>
+  </div>
+
+  <div id="toastContainer" class="toast-container"></div>
+  <script type="module" src="/avatar.js"></script>
+  <script type="module" src="/app.js"></script>
+  <script>
+    // Initialize Lucide icons
+    lucide.createIcons();
+  </script>
+</body>
+</html>

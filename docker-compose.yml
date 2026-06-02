@@ -1,0 +1,14 @@
+services:
+  synod:
+    image: node:22
+    working_dir: /app
+    command: sh -c "npm install && npm run migrate && npm run seed && npm start"
+    ports:
+      - "3000:3000"
+    volumes:
+      - .:/app
+      - synod_data:/app/data
+    env_file:
+      - .env
+volumes:
+  synod_data:
