@@ -1099,3 +1099,91 @@ $("wizSaveBtn").addEventListener("click", async () => {
 // Load Settings on initial startup
 loadSettings().catch(console.error);
 
+// --- Scout Module: URL Analysis ---
+async function scoutAnalyze() {
+  const url = $('scoutUrlInput').value.trim();
+  if (!url) return;
+
+  const status = $('scoutStatus');
+  const btn = $('scoutAnalyzeBtn');
+  status.textContent = 'Analyzing…';
+  btn.disabled = true;
+  btn.style.opacity = '0.5';
+
+  try {
+    const res = await fetch('/api/v1/scout/analyze', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ url })
+    });
+    const data = await res.json();
+
+    if (!data.success) {
+      status.textContent = data.error || 'Analysis failed';
+      status.style.color = 'var(--danger, #e74c3c)';
+      return;
+    }
+
+    status.textContent = 'Done! Report ready.';
+    status.style.color = 'var(--accent)';
+    scoutAutoFeed(data);
+  } catch (e) {
+    status.textContent = 'Network error';
+    status.style.color = 'var(--danger, #e74c3c)';
+  } finally {
+    btn.disabled = false;
+    btn.style.opacity = '';
+  }
+}
+
+function scoutAutoFeed(data) {
+  // Fill the topic textarea with a structured prompt including the scout report
+  const meta = data.metadata || {};
+  const topic = [
+    `Assess this project and create an execution plan:`,
+    ``,
+    data.report,
+    ``,
+    `Based on the above Scout report, please:`,
+    `1. Identify what is complete vs incomplete`,
+    `2. Prioritize the remaining work`,
+    `3. Propose a phased execution plan`,
+    `4. Highlight risks and dependencies`,
+  ].join('\n');
+
+  const textarea = $('mainTopicInput');
+  textarea.value = topic;
+  textarea.dispatchEvent(new Event('input', { bubbles: true }));
+  textarea.focus();
+
+  // Scroll to topic
+  textarea.scrollIntoView({ behavior: 'smooth', block: 'center' });
+
+  // Brief toast
+  showToast('Scout report loaded — review and convene when ready', 'info');
+
+  // Auto-expand textarea
+  if (typeof autoResize === 'function') {
+    autoResize.call(textarea);
+  } else {
+    textarea.style.height = 'auto';
+    textarea.style.height = textarea.scrollHeight + 'px';
+  }
+}
+
+// Bind Scout events (idempotent — runs on DOMContentLoaded or immediately if already loaded)
+(function bindScout() {
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', bindScout);
+    return;
+  }
+  // Also bind Enter key on the URL input
+  const scoutInput = $('scoutUrlInput');
+  if (scoutInput) scoutInput.addEventListener('keypress', (e) => {
+    if (e.key === 'Enter') { e.preventDefault(); scoutAnalyze(); }
+  });
+})();
+
+// Export scoutAnalyze for onclick handler (module scope)
+window.scoutAnalyze = scoutAnalyze;
+

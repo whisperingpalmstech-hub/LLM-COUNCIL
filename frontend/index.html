@@ -123,6 +123,12 @@
           <div class="huge-composer">
              <button id="mainTopicFileBtn" type="button" style="background: rgba(255,255,255,0.05); border: 1px solid var(--border); border-radius: 50%; width: 48px; height: 48px; color: var(--text); cursor: pointer; display: flex; align-items: center; justify-content: center; transition: all 0.2s;"><i data-lucide="paperclip" style="width: 20px; height: 20px;"></i></button>
              <input type="file" id="mainTopicFileInput" style="display: none;" />
+             <div id="scoutBar" style="display: flex; gap: 8px; margin-bottom: 8px; align-items: center;">
+                <i data-lucide="link" style="width: 16px; height: 16px; opacity: 0.5;"></i>
+                <input id="scoutUrlInput" type="url" placeholder="Paste GitHub repo URL to analyze before convening…" style="flex:1; padding:8px 12px; border:1px solid var(--border); border-radius:8px; background:rgba(255,255,255,0.05); color:var(--text); font-size:13px;" />
+                <button id="scoutAnalyzeBtn" type="button" onclick="window.scoutAnalyze()" style="padding:8px 14px; border-radius:8px; border:1px solid var(--accent); background:transparent; color:var(--accent); cursor:pointer; font-size:12px; white-space:nowrap;">Scout</button>
+                <span id="scoutStatus" style="font-size:11px; color:var(--muted); white-space:nowrap;"></span>
+             </div>
              <textarea id="mainTopicInput" placeholder="What decision requires maximum scrutiny?"></textarea>
              <button id="mainTopicMicBtn" type="button" class="huge-mic-btn" style="background: rgba(255,255,255,0.05); width: 48px; height: 48px; flex-shrink: 0;" title="Voice Input">
                 <i data-lucide="mic"></i>

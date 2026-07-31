@@ -6,6 +6,7 @@ import { fileURLToPath } from "node:url";
 import { EventEmitter } from "node:events";
 import { createApiRouter } from "./routes/api.js";
 import { createMobileUploadRouter } from "./routes/mobile_upload.js";
+import { createScoutRouter } from "./routes/scout.js";
 import { openDatabase, migrate } from "./db/sqlite.js";
 import { CouncilOrchestrator } from "./core/orchestrator.js";
 
@@ -26,6 +27,7 @@ export async function createApp(options = {}) {
   app.use(express.json({ limit: "10mb" }));
   app.use("/api/v1", createApiRouter({ db, events, orchestrator }));
   app.use("/api/v1/mobile", createMobileUploadRouter({ db, events }));
+  app.use("/api/v1/scout", createScoutRouter());
   app.use("/uploads", express.static(path.join(root, "data/uploads")));
   app.use(express.static(path.join(root, "frontend"), {
     setHeaders: (res, path) => {
