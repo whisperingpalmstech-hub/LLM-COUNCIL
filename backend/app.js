@@ -46,4 +46,10 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
     console.log(`Synod is running at http://localhost:${server.address().port} (bound to 0.0.0.0)`);
   });
   server.on('error', (e) => console.error("Server error:", e));
+  
+  // Prevent silent kills — log and clean up gracefully
+  process.on('SIGTERM', () => { console.log('[Synod] SIGTERM received — shutting down'); server.close(() => process.exit(0)); });
+  process.on('SIGINT',  () => { console.log('[Synod] SIGINT received — shutting down');  server.close(() => process.exit(0)); });
+  process.on('uncaughtException', (err) => { console.error('[Synod] uncaughtException:', err.message, err.stack); process.exit(1); });
+  process.on('unhandledRejection', (reason) => { console.error('[Synod] unhandledRejection:', reason); });
 }

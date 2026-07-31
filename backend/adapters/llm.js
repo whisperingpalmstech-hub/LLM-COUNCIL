@@ -37,11 +37,15 @@ export class LlmAdapter {
 
     const prompt = providerPrompt({ role, topic, round, priorMessages, compact, customPrompt }, this.db);
     try {
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), 30000); // 30s timeout
       const res = await fetch(`${baseUrl}/workspace/${slug}/chat`, {
         method: "POST",
         headers: { "Content-Type": "application/json", Authorization: `Bearer ${apiKey}` },
-        body: JSON.stringify({ message: prompt, mode: "chat" })
+        body: JSON.stringify({ message: prompt, mode: "chat" }),
+        signal: controller.signal
       });
+      clearTimeout(timeout);
       if (!res.ok) throw new Error(`AnythingLLM ${res.status}`);
       const data = await res.json();
       let text = data.textResponse ?? "";
@@ -54,7 +58,11 @@ export class LlmAdapter {
       ];
       return parsed;
     } catch (err) {
-      console.warn(`[AnythingLLM] Workspace ${slug} failed for role ${roleType}: ${err.message}. Using mock.`);
+      if (err.name === 'AbortError') {
+        console.warn(`[AnythingLLM] Workspace ${slug} timed out after 30s for role ${roleType}. Using mock.`);
+      } else {
+        console.warn(`[AnythingLLM] Workspace ${slug} failed for role ${roleType}: ${err.message}. Using mock.`);
+      }
       return mockCompletion({ role, topic, round, compact });
     }
   }

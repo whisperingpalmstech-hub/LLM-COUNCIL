@@ -779,21 +779,7 @@ $("langToggle").addEventListener("change", (e) => {
 loadSessions();
 loadCouncils();
 
-// Tab switching logic
-document.querySelectorAll(".tab").forEach(button => {
-  button.addEventListener("click", () => {
-    document.querySelectorAll(".tab").forEach(b => b.classList.remove("active"));
-    document.querySelectorAll(".tabPanel").forEach(p => p.classList.add("hidden"));
-    
-    button.classList.add("active");
-    const tabId = button.getAttribute("data-tab");
-    $(tabId).classList.remove("hidden");
-    
-    if (tabId === "history") loadHistory();
-    if (tabId === "councils") loadCouncils();
-    if (tabId === "settings") loadSettings();
-  });
-});
+// Tab switching is handled by the drawer-based handler above (line ~37)
 
 function parseTasksFromPayload(raw) {
   const todo = [];

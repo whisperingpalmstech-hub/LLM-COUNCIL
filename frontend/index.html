@@ -176,6 +176,11 @@
             <label style="font-size: 12px; display: flex; flex-direction: column; gap: 4px;"><span>Kelly Circuit Breaker %</span><input id="settingKelly" type="number" value="5" style="padding: 8px;"/></label>
             <label style="font-size: 12px; display: flex; flex-direction: column; gap: 4px;"><span>Entropy Threshold</span><input id="settingEntropy" type="number" value="30" style="padding: 8px;"/></label>
 
+            <h3 style="margin: 16px 0 8px 0; color: var(--accent); font-size: 14px;">Custom Prompt Templates</h3>
+            <label style="font-size: 12px; display: flex; flex-direction: column; gap: 4px;"><span>Interview Prompt</span><textarea id="settingPromptInterviewer" style="padding: 8px; min-height: 80px; font-size: 11px; font-family: monospace;"></textarea></label>
+            <label style="font-size: 12px; display: flex; flex-direction: column; gap: 4px;"><span>Deliberation Prompt</span><textarea id="settingPromptDeliberation" style="padding: 8px; min-height: 80px; font-size: 11px; font-family: monospace;"></textarea></label>
+            <label style="font-size: 12px; display: flex; flex-direction: column; gap: 4px;"><span>Verdict Prompt</span><textarea id="settingPromptVerdict" style="padding: 8px; min-height: 80px; font-size: 11px; font-family: monospace;"></textarea></label>
+
             <button class="primary" type="submit" style="margin-top: 16px; width: 100%; justify-content: center;"><i data-lucide="save"></i> Save Settings</button>
          </form>
          
@@ -192,7 +197,7 @@
            </form>
            <form id="councilForm"><input id="councilName" /><input id="councilDescription" /><input id="vetoRoles" /><textarea id="modelOverrides"></textarea><textarea id="manifest"></textarea><button data-i18n="save"></button></form>
            <input id="mainChatInput" /><button id="mainSendBtn"></button>
-           <textarea id="settingPromptInterviewer"></textarea><textarea id="settingPromptDeliberation"></textarea><textarea id="settingPromptVerdict"></textarea>
+         </div>
          </div>
       </aside>
 
