@@ -1,6 +1,7 @@
 import "dotenv/config";
 
-const baseUrl = process.env.ANYTHINGLLM_BASE_URL || "http://localhost:3001/api/v1";
+const rawUrl = process.env.ANYTHINGLLM_BASE_URL || "http://localhost:3001/api/v1";
+const baseUrl = rawUrl.endsWith("/api/v1") ? rawUrl : rawUrl.replace(/\/+$/, "") + "/api/v1";
 const apiKey = process.env.ANYTHINGLLM_API_KEY || "";
 
 const workspaces = [
