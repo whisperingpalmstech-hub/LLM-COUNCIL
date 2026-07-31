@@ -5,6 +5,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { EventEmitter } from "node:events";
 import { createApiRouter } from "./routes/api.js";
+import { createMobileUploadRouter } from "./routes/mobile_upload.js";
 import { openDatabase, migrate } from "./db/sqlite.js";
 import { CouncilOrchestrator } from "./core/orchestrator.js";
 
@@ -16,15 +17,24 @@ export async function createApp(options = {}) {
   migrate(db);
   const events = options.events ?? new EventEmitter();
   events.setMaxListeners(200);
-  const orchestrator = new CouncilOrchestrator({ db, events });
+  const orchestrator = new CouncilOrchestrator({ db, events, env: options.env ?? process.env });
   const app = express();
   app.locals.db = db;
   app.locals.events = events;
   app.locals.orchestrator = orchestrator;
   app.use(cors());
-  app.use(express.json({ limit: "1mb" }));
+  app.use(express.json({ limit: "10mb" }));
   app.use("/api/v1", createApiRouter({ db, events, orchestrator }));
-  app.use(express.static(path.join(root, "frontend")));
+  app.use("/api/v1/mobile", createMobileUploadRouter({ db, events }));
+  app.use("/uploads", express.static(path.join(root, "data/uploads")));
+  app.use(express.static(path.join(root, "frontend"), {
+    setHeaders: (res, path) => {
+      res.setHeader("Cache-Control", "no-store, no-cache, must-revalidate, proxy-revalidate");
+      res.setHeader("Pragma", "no-cache");
+      res.setHeader("Expires", "0");
+    }
+  }));
+
   app.get("*", (_req, res) => res.sendFile(path.join(root, "frontend", "index.html")));
   return app;
 }
@@ -32,7 +42,8 @@ export async function createApp(options = {}) {
 if (process.argv[1] === fileURLToPath(import.meta.url)) {
   const app = await createApp();
   const port = Number(process.env.PORT ?? 3000);
-  app.listen(port, () => {
-    console.log(`Synod is running at http://localhost:${port}`);
+  const server = app.listen(port, '0.0.0.0', () => {
+    console.log(`Synod is running at http://localhost:${server.address().port} (bound to 0.0.0.0)`);
   });
+  server.on('error', (e) => console.error("Server error:", e));
 }

@@ -9,7 +9,9 @@
     "dev": "node backend/app.js",
     "migrate": "node backend/db/sqlite.js migrate",
     "seed": "node scripts/seed-default-councils.js",
+    "setup-workspaces": "node scripts/setup-anythingllm-workspaces.js",
     "test": "node --test tests/unit/*.test.js tests/integration/*.test.js"
+
   },
   "engines": {
     "node": ">=22"

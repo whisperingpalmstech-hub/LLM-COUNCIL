@@ -25,8 +25,18 @@ export function openDatabase(location = "./data/synod.sqlite") {
 }
 
 export function migrate(db) {
-  const sql = fs.readFileSync(path.join(root, "migrations", "001-init.sql"), "utf8");
-  db.exec(sql);
+  const migrationsDir = path.join(root, "migrations");
+  const files = fs.readdirSync(migrationsDir).filter(f => f.endsWith(".sql")).sort();
+  for (const file of files) {
+    const sql = fs.readFileSync(path.join(migrationsDir, file), "utf8");
+    try {
+      db.exec(sql);
+    } catch (e) {
+      if (!e.message.includes("duplicate column name")) {
+        throw e;
+      }
+    }
+  }
   seedDefaults(db);
 }
 

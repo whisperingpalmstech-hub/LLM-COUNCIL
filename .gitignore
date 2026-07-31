@@ -20,3 +20,10 @@ build/
 coverage/
 
 scratch/
+
+# Runtime logs
+*.log
+
+# Runtime data (synod brain vault, anythingllm storage)
+data/anythingllm_storage/
+data/synod-brain-vault/

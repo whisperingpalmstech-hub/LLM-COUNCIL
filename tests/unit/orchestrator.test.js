@@ -4,11 +4,17 @@ import { EventEmitter } from "node:events";
 import { openDatabase, migrate } from "../../backend/db/sqlite.js";
 import { CouncilOrchestrator } from "../../backend/core/orchestrator.js";
 
+const mockEnv = { ...process.env, PROVIDER_MODE: "mock", ANYTHINGLLM_API_KEY: "" };
+
+function createOrchestrator(db) {
+  return new CouncilOrchestrator({ db, events: new EventEmitter(), env: mockEnv });
+}
+
 test("compact internal communication payloads omit verbose reasoning", async () => {
   const db = openDatabase(":memory:");
   migrate(db);
-  const orchestrator = new CouncilOrchestrator({ db, events: new EventEmitter() });
-  const session = orchestrator.createSession({
+  const orchestrator = createOrchestrator(db);
+  const session = await orchestrator.createSession({
     topic: "Should compact JSON be used?",
     maxRounds: 1,
     compactInternalCommunication: true,
@@ -27,7 +33,7 @@ test("compact internal communication payloads omit verbose reasoning", async () 
 test("static council duplicate roles require display names", () => {
   const db = openDatabase(":memory:");
   migrate(db);
-  const orchestrator = new CouncilOrchestrator({ db, events: new EventEmitter() });
+  const orchestrator = createOrchestrator(db);
   assert.throws(() => orchestrator.createCouncil({
     name: "Duplicate experts",
     role_manifest: [
@@ -40,8 +46,8 @@ test("static council duplicate roles require display names", () => {
 test("psychologist role triggers for negotiation and persuasion topics", async () => {
   const db = openDatabase(":memory:");
   migrate(db);
-  const orchestrator = new CouncilOrchestrator({ db, events: new EventEmitter() });
-  const session = orchestrator.createSession({
+  const orchestrator = createOrchestrator(db);
+  const session = await orchestrator.createSession({
     topic: "Negotiation and persuasion strategy without fear or greed manipulation",
     allowWebSearch: false,
     allowRag: false,
@@ -57,7 +63,7 @@ test("psychologist role triggers for negotiation and persuasion topics", async (
 test("static council can chain an AnythingLLM workspace as a role model", async () => {
   const db = openDatabase(":memory:");
   migrate(db);
-  const orchestrator = new CouncilOrchestrator({ db, events: new EventEmitter() });
+  const orchestrator = createOrchestrator(db);
   const council = orchestrator.createCouncil({
     name: "Workspace Chain",
     role_manifest: [
@@ -66,7 +72,7 @@ test("static council can chain an AnythingLLM workspace as a role model", async 
     ],
     model_overrides: { DOMAIN_EXPERT: "anythingllm" }
   });
-  const session = orchestrator.createSession({
+  const session = await orchestrator.createSession({
     topic: "Should this council chain AnythingLLM workspaces?",
     councilId: council.id,
     maxRounds: 1,
@@ -78,3 +84,18 @@ test("static council can chain an AnythingLLM workspace as a role model", async 
   const payloads = orchestrator.messages(session.id).map((message) => JSON.parse(message.payload));
   assert.ok(payloads.some((payload) => payload.knowledgeSourcesUsed?.some((source) => source.type === "ANYTHINGLLM_WORKSPACE" && source.workspaceId === "product")));
 });
+
+test("LlmResearcher researches latest models and writes them to settings", async () => {
+  const db = openDatabase(":memory:");
+  migrate(db);
+  const { LlmResearcher } = await import("../../backend/core/llm_researcher.js");
+  const researcher = new LlmResearcher({ db });
+  const recommendations = await researcher.researchLatestModels();
+  assert.ok(recommendations.length > 0);
+  assert.ok(recommendations[0].model_name);
+  const stored = db.prepare("select value from system_settings where key = 'LATEST_LLM_RECOMMENDATIONS'").get();
+  assert.ok(stored);
+  const parsed = JSON.parse(stored.value);
+  assert.equal(parsed.length, recommendations.length);
+});
+

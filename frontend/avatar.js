@@ -39,8 +39,8 @@ class SpeechEngine {
 
 class AvatarHost {
   constructor() {
-    this.state = "hidden";
-    this.container = $("avatarContainer");
+    this.state = "immersive";
+    this.container = $("avatarStage");
     this.video = $("avatarVideo");
     this.backdrop = $("avatarBackdrop");
     this.overlay = $("avatarPlayOverlay");
@@ -52,35 +52,14 @@ class AvatarHost {
   }
 
   bindEvents() {
-    this.overlay.addEventListener("click", () => this.initializeWelcome());
-    
-    // Configuration Contextual Guide
-    const topicInput = $("topic");
-    const roundsSelect = $("rounds");
-    
-    let typedTopic = false;
-    topicInput?.addEventListener("input", () => {
-      if (!this.initialized || typedTopic || this.state !== "config") return;
-      typedTopic = true;
-      this.triggerGuide("Great choice. Now configure the debate settings.");
-    });
-
-    roundsSelect?.addEventListener("change", () => {
-      if (!this.initialized || this.state !== "config") return;
-      this.triggerGuide("Rounds configured. Your setup is complete. Click Convene Synod whenever you are ready.");
-    });
+    if (this.overlay) {
+      this.overlay.addEventListener("click", () => this.initializeWelcome());
+    }
   }
 
   setState(newState) {
-    this.container.classList.remove(`state-${this.state}`);
     this.state = newState;
-    this.container.classList.add(`state-${this.state}`);
-    
-    if (newState === "verdict") {
-      this.backdrop.classList.add("active");
-    } else {
-      this.backdrop.classList.remove("active");
-    }
+    // Removed old class switching logic since avatar is permanently immersive
   }
 
   lipSyncSpeak(text, onComplete) {
@@ -88,13 +67,13 @@ class AvatarHost {
       text,
       () => {
         // onStart
-        this.container.classList.add("avatar-speaking");
-        this.video.play().catch(e => console.error(e));
+        if (this.container) this.container.classList.add("avatar-speaking");
+        if (this.video) this.video.play().catch(e => console.error(e));
       },
       () => {
         // onEnd
-        this.container.classList.remove("avatar-speaking");
-        this.video.pause();
+        if (this.container) this.container.classList.remove("avatar-speaking");
+        if (this.video) this.video.pause();
         onComplete?.();
       }
     );
@@ -103,15 +82,11 @@ class AvatarHost {
   initializeWelcome() {
     if (this.initialized) return;
     this.initialized = true;
-    this.overlay.classList.add("hidden");
-    
-    this.setState("welcome");
+    if (this.overlay) this.overlay.classList.add("hidden");
     
     this.lipSyncSpeak(
-      "Hello and welcome to Debate Arena. I am your AI debate facilitator. Please enter your topic, configure your debate settings, select the number of rounds, and click Start Debate when you are ready. I will guide you throughout the process and present the final verdict once the discussion is complete.",
-      () => {
-        this.setState("config");
-      }
+      "Hello and welcome to the Synod Superbrain. Input your idea or question below, and our multi-LLM council will orchestrate a specialized execution plan for you.",
+      () => {}
     );
   }
 
@@ -121,14 +96,12 @@ class AvatarHost {
 
   onSessionStart() {
     if (!this.initialized) return;
-    this.setState("welcome"); // Temporarily enlarge to speak
-    this.lipSyncSpeak("Excellent. The debate is now beginning. I will monitor the discussion and return with the final verdict once all rounds are completed.", () => {
-      this.setState("running");
+    this.lipSyncSpeak("Excellent. The council is convening. I will orchestrate the debate and generate the agentic payload once consensus is reached.", () => {
     });
   }
 
   onRoundComplete(roundNumber) {
-    if (!this.initialized || this.state !== "running") return;
+    if (!this.initialized) return;
     const phrases = [
       `Round ${roundNumber} completed.`,
       `Proceeding from round ${roundNumber}.`,
@@ -139,16 +112,9 @@ class AvatarHost {
 
   onVerdict(verdictSummary) {
     if (!this.initialized) return;
-    this.setState("verdict");
     this.lipSyncSpeak(
-      "The debate has concluded. Based on the discussion, evidence, reasoning, and evaluation criteria, here is the final verdict. " + verdictSummary,
-      () => {
-        // Optionally close after a delay, or stay open until clicked
-        setTimeout(() => {
-          this.setState("running");
-          this.backdrop.classList.remove("active");
-        }, 3000);
-      }
+      "The debate has concluded. Here is your final orchestration payload. " + verdictSummary,
+      () => {}
     );
   }
 }

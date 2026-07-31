@@ -4,8 +4,10 @@ import request from "supertest";
 import { createApp } from "../../backend/app.js";
 import { openDatabase } from "../../backend/db/sqlite.js";
 
+const mockEnv = { ...process.env, PROVIDER_MODE: "mock", ANYTHINGLLM_API_KEY: "" };
+
 test("full four-round Synod session completes with mock providers", async () => {
-  const app = await createApp({ db: openDatabase(":memory:") });
+  const app = await createApp({ db: openDatabase(":memory:"), env: mockEnv });
   const created = await request(app)
     .post("/api/v1/sessions")
     .send({
@@ -31,7 +33,7 @@ test("full four-round Synod session completes with mock providers", async () => 
 });
 
 test("council create and import endpoints work", async () => {
-  const app = await createApp({ db: openDatabase(":memory:") });
+  const app = await createApp({ db: openDatabase(":memory:"), env: mockEnv });
   const council = await request(app)
     .post("/api/v1/councils")
     .send({
@@ -48,4 +50,20 @@ test("council create and import endpoints work", async () => {
   const session = await request(app).post("/api/v1/sessions").send({ topic: "Veto escalation topic", councilId: council.body.council_id, autoStart: false }).expect(201);
   const imported = await request(app).post(`/api/v1/councils/from-session/${session.body.id}`).send({ name: "Imported Board" }).expect(201);
   assert.ok(imported.body.council_id);
+});
+
+test("headless thinking endpoint /brain/think completes synchronously", async () => {
+  const app = await createApp({ db: openDatabase(":memory:"), env: mockEnv });
+  const response = await request(app)
+    .post("/api/v1/brain/think")
+    .send({
+      idea: "Evaluate whether to use Svelte or React for a lightweight dashboard app",
+      mode: "fast",
+      maxRounds: 1
+    })
+    .expect(200);
+
+  assert.equal(response.body.status, "COMPLETED");
+  assert.ok(response.body.sessionId);
+  assert.ok(response.body.verdict.summary);
 });

@@ -1,0 +1,263 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Synod Mobile Portal</title>
+  <link rel="stylesheet" href="style.css">
+  <script src="https://unpkg.com/lucide@latest"></script>
+  <style>
+    body {
+      background: radial-gradient(circle at 50% 50%, #0f172a, #020617);
+      color: #f8fafc;
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 16px;
+    }
+    .mobile-card {
+      width: 100%;
+      max-width: 480px;
+      padding: 24px;
+      text-align: center;
+    }
+    .media-btn {
+      width: 80px;
+      height: 80px;
+      border-radius: 50%;
+      background: rgba(255, 255, 255, 0.1);
+      border: 2px dashed rgba(255, 255, 255, 0.3);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
+      margin: 12px auto;
+      transition: all 0.3s ease;
+    }
+    .media-btn:hover {
+      background: rgba(0, 122, 255, 0.2);
+      border-color: #007aff;
+    }
+    .recording {
+      background: rgba(239, 68, 68, 0.2);
+      border-color: #ef4444;
+      animation: pulse 1.5s infinite;
+    }
+    @keyframes pulse {
+      0% { transform: scale(1); }
+      50% { transform: scale(1.05); }
+      100% { transform: scale(1); }
+    }
+    #previewImg {
+      max-width: 100%;
+      max-height: 200px;
+      border-radius: 12px;
+      margin-top: 12px;
+      display: none;
+    }
+    .status-msg {
+      margin-top: 12px;
+      font-size: 14px;
+      font-weight: 500;
+    }
+  </style>
+</head>
+<body>
+  <div class="aurora"></div>
+  
+  <div class="glass panel mobile-card">
+    <h2 style="margin-bottom: 8px;"><i data-lucide="smartphone" style="vertical-align: middle; margin-right: 8px; color: #007aff;"></i> Synod Mobile</h2>
+    <p class="muted" style="font-size: 14px; margin-bottom: 24px;">Beam ideas, photos, or voice notes directly to your active session.</p>
+    
+    <div class="fields" style="text-align: left; margin-bottom: 20px;">
+      <label>
+        <span>Add a quick note / description</span>
+        <textarea id="mobileText" placeholder="Describe the idea or context..." rows="3" style="width: 100%; resize: none;"></textarea>
+      </label>
+    </div>
+
+    <div style="display: flex; justify-content: space-around; margin-bottom: 24px;">
+      <div>
+        <label for="cameraInput" class="media-btn" id="cameraBtn">
+          <i data-lucide="camera" style="width: 32px; height: 32px; color: #f8fafc;"></i>
+        </label>
+        <span style="font-size: 12px; font-weight: 500;">Capture Photo</span>
+        <input type="file" id="cameraInput" accept="image/*" capture="environment" style="display: none;">
+      </div>
+
+      <div>
+        <div class="media-btn" id="recordBtn">
+          <i data-lucide="mic" id="micIcon" style="width: 32px; height: 32px; color: #f8fafc;"></i>
+        </div>
+        <span id="recordLabel" style="font-size: 12px; font-weight: 500;">Record Voice</span>
+      </div>
+    </div>
+
+    <img id="previewImg" alt="Preview">
+    <div id="audioPreview" style="display: none; margin-top: 12px; align-items: center; justify-content: center; gap: 8px; background: rgba(255,255,255,0.05); padding: 8px; border-radius: 12px;">
+      <i data-lucide="music" style="color: #007aff;"></i>
+      <span style="font-size: 13px;">Voice recording ready</span>
+      <button class="button" id="clearAudio" style="padding: 4px 8px; font-size: 11px;">Clear</button>
+    </div>
+
+    <div id="status" class="status-msg muted">Ready</div>
+
+    <button class="primary wide" id="submitBtn" style="margin-top: 24px;">
+      <i data-lucide="send"></i> Beam to Brain
+    </button>
+  </div>
+
+  <script>
+    lucide.createIcons();
+    
+    const urlParams = new URLSearchParams(window.location.search);
+    const sessionId = urlParams.get('sessionId');
+    
+    if (!sessionId) {
+      document.getElementById('status').innerText = 'Error: No session ID provided. Please scan the QR code from the desktop dashboard.';
+      document.getElementById('status').style.color = '#ef4444';
+      document.getElementById('submitBtn').disabled = true;
+    }
+
+    let fileData = null;
+    let fileName = null;
+    let fileType = null;
+    
+    // Camera / Image preview
+    const cameraInput = document.getElementById('cameraInput');
+    const previewImg = document.getElementById('previewImg');
+    
+    cameraInput.addEventListener('change', (e) => {
+      const file = e.target.files[0];
+      if (file) {
+        fileName = file.name;
+        fileType = file.type;
+        const reader = new FileReader();
+        reader.onload = (event) => {
+          fileData = event.target.result;
+          previewImg.src = fileData;
+          previewImg.style.display = 'block';
+          document.getElementById('status').innerText = 'Photo captured successfully';
+        };
+        reader.readAsDataURL(file);
+      }
+    });
+
+    // Audio recording logic
+    const recordBtn = document.getElementById('recordBtn');
+    const micIcon = document.getElementById('micIcon');
+    const recordLabel = document.getElementById('recordLabel');
+    const audioPreview = document.getElementById('audioPreview');
+    const clearAudio = document.getElementById('clearAudio');
+    
+    let mediaRecorder = null;
+    let audioChunks = [];
+    let isRecording = false;
+
+    recordBtn.addEventListener('click', async () => {
+      if (!isRecording) {
+        try {
+          const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+          mediaRecorder = new MediaRecorder(stream);
+          audioChunks = [];
+          
+          mediaRecorder.ondataavailable = (event) => {
+            audioChunks.push(event.data);
+          };
+          
+          mediaRecorder.onstop = () => {
+            const audioBlob = new Blob(audioChunks, { type: 'audio/wav' });
+            fileName = 'voice-note.wav';
+            fileType = 'audio/wav';
+            const reader = new FileReader();
+            reader.onload = (event) => {
+              fileData = event.target.result;
+              audioPreview.style.display = 'flex';
+              document.getElementById('status').innerText = 'Audio recorded successfully';
+            };
+            reader.readAsDataURL(audioBlob);
+          };
+          
+          mediaRecorder.start();
+          isRecording = true;
+          recordBtn.classList.add('recording');
+          micIcon.setAttribute('data-lucide', 'square');
+          recordLabel.innerText = 'Stop';
+          lucide.createIcons();
+          document.getElementById('status').innerText = 'Recording...';
+        } catch (err) {
+          alert('Microphone access denied: ' + err.message);
+        }
+      } else {
+        mediaRecorder.stop();
+        // Stop all audio tracks to release microphone
+        mediaRecorder.stream.getTracks().forEach(track => track.stop());
+        isRecording = false;
+        recordBtn.classList.remove('recording');
+        micIcon.setAttribute('data-lucide', 'mic');
+        recordLabel.innerText = 'Record Voice';
+        lucide.createIcons();
+      }
+    });
+
+    clearAudio.addEventListener('click', () => {
+      fileData = null;
+      fileName = null;
+      fileType = null;
+      audioPreview.style.display = 'none';
+      document.getElementById('status').innerText = 'Recording cleared';
+    });
+
+    // Submission logic
+    const submitBtn = document.getElementById('submitBtn');
+    submitBtn.addEventListener('click', async () => {
+      const text = document.getElementById('mobileText').value;
+      if (!text && !fileData) {
+        document.getElementById('status').innerText = 'Please write a note, take a photo, or record a voice note first.';
+        return;
+      }
+
+      document.getElementById('status').innerText = 'Beaming to Brain...';
+      submitBtn.disabled = true;
+
+      try {
+        const response = await fetch('/api/v1/mobile/upload', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            sessionId,
+            fileName,
+            fileType,
+            fileData,
+            text
+          })
+        });
+
+        const result = await response.json();
+        if (result.success) {
+          document.getElementById('status').innerText = 'Successfully Beamed!';
+          document.getElementById('status').style.color = '#10b981';
+          document.getElementById('mobileText').value = '';
+          previewImg.style.display = 'none';
+          audioPreview.style.display = 'none';
+          fileData = null;
+          fileName = null;
+          fileType = null;
+          setTimeout(() => {
+            document.getElementById('status').innerText = 'Ready';
+            document.getElementById('status').style.color = '';
+            submitBtn.disabled = false;
+          }, 3000);
+        } else {
+          throw new Error(result.error?.message || 'Upload failed');
+        }
+      } catch (err) {
+        document.getElementById('status').innerText = 'Failed: ' + err.message;
+        document.getElementById('status').style.color = '#ef4444';
+        submitBtn.disabled = false;
+      }
+    });
+  </script>
+</body>
+</html>
