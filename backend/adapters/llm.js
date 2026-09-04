@@ -1,4 +1,5 @@
 import { AnythingLlmClient } from "./anythingllm.js";
+import { PromptRegistry } from "../core/prompt_registry.js";
 
 export class LlmAdapter {
   constructor(options = {}) {
@@ -10,6 +11,7 @@ export class LlmAdapter {
       this.db = options.db;
     }
     this.anything = new AnythingLlmClient(this.env, { db: this.db });
+    this.prompts = this.db ? new PromptRegistry(this.db) : null;
   }
 
   async complete({ role, topic, round, priorMessages = [], compact = true, customPrompt }) {
@@ -80,7 +82,7 @@ export class LlmAdapter {
       let text = data.textResponse ?? "";
       // Strip <think>...</think> reasoning blocks from DeepSeek etc.
       text = text.replace(/<think>[\s\S]*?<\/think>/gi, "").trim();
-      const parsed = await parseAnythingWithRepair(this.anything, slug, text, { role, topic, round });
+      const parsed = await parseAnythingWithRepair(this.anything, slug, text, { role, topic, round }, this.prompts);
       parsed.payload.knowledgeSourcesUsed = [
         ...asArray(parsed.payload.knowledgeSourcesUsed),
         { type: "ANYTHINGLLM_WORKSPACE", workspace: slug, model: data.metrics?.model ?? "unknown" }
@@ -146,11 +148,7 @@ export class LlmAdapter {
 
 
   async checkEntropy(topic) {
-    const prompt = `Evaluate the following user topic for clarity, logical coherence, and feasibility.
-Topic: ${topic}
-Return ONLY strict JSON with two fields:
-- entropyScore: A number from 0 to 100, where 100 is perfectly clear and highly actionable, and 0 is gibberish or extremely vague.
-- feedback: A short 1-sentence explanation of why it received this score, and what details are missing if the score is low.`;
+    const prompt = this.prompts?.render("topic.refinement", { topic, priorMessages: "No prior context." }) || `Assess whether this topic is actionable and return strict JSON with entropyScore and feedback. Topic: ${topic}`;
 
     if ((this.env.PROVIDER_MODE ?? "mock") === "anythingllm") {
       try {
@@ -204,7 +202,7 @@ Return ONLY strict JSON with two fields:
       let text = response.textResponse ?? response.response ?? response.message ?? JSON.stringify(response);
       // Strip <think>...</think> reasoning blocks
       text = text.replace(/<think>[\s\S]*?<\/think>/gi, "").trim();
-      const parsed = await parseAnythingWithRepair(this.anything, input.role.workspace_id, text, input);
+      const parsed = await parseAnythingWithRepair(this.anything, input.role.workspace_id, text, input, this.prompts);
       parsed.payload.knowledgeSourcesUsed = [
         ...asArray(parsed.payload.knowledgeSourcesUsed),
         { type: "ANYTHINGLLM_WORKSPACE", workspaceId: input.role.workspace_id, mode: response.mode ?? "real" }
@@ -742,14 +740,14 @@ function isUpstreamErrorPage(value) {
   return /(?:<!doctype\s+html|<html\b|cf-error|cloudflare\s+tunnel|cloudflared|trycloudflare\.com|webassets\/errors|error\s+(?:502|503|520|522|523|525|1033))/i.test(source);
 }
 
-async function parseAnythingWithRepair(client, workspaceId, text, input) {
+async function parseAnythingWithRepair(client, workspaceId, text, input, registry) {
   const parsed = parseProviderJson(text, input);
   if (!parsed.warning) return parsed;
   try {
     const repair = await client.chat({
       workspaceId,
       mode: "chat",
-      prompt: structuredRepairPrompt(text)
+      prompt: structuredRepairPrompt(text, registry)
     });
     const repairedText = String(repair.textResponse ?? repair.response ?? repair.message ?? "")
       .replace(/<think>[\s\S]*?<\/think>/gi, "").trim();
@@ -760,11 +758,9 @@ async function parseAnythingWithRepair(client, workspaceId, text, input) {
   }
 }
 
-function structuredRepairPrompt(text) {
-  return `Convert the response below into one strict JSON object. Preserve its meaning, remove prose outside JSON, and do not add unsupported facts.
-Use this schema where relevant: {"shortSummary":"","decision":"","rationale":"","keyClaims":[],"evidence":[],"assumptions":[],"risks":[],"alternatives":[],"recommendedActions":[],"successMetrics":[],"guardrails":[],"knowledgeGaps":[],"agreements":[],"disagreements":[],"openQuestions":[],"confidence":0.0,"question":"","whyItMatters":"","suggestedAnswers":[],"isSatisfied":false,"refinedTopic":""}.
-Original response:
-${String(text ?? "").slice(0, 7000)}`;
+function structuredRepairPrompt(text, registry) {
+  const schema = { shortSummary: "", decision: "", rationale: "", keyClaims: [], evidence: [], assumptions: [], risks: [], alternatives: [], recommendedActions: [], successMetrics: [], guardrails: [], knowledgeGaps: [], agreements: [], disagreements: [], openQuestions: [], confidence: 0, question: "", whyItMatters: "", suggestedAnswers: [], isSatisfied: false, refinedTopic: "" };
+  return registry?.render("response.repair", { schema: JSON.stringify(schema), response: String(text ?? "").slice(0, 7000) }) || `Convert this into strict JSON without adding facts: ${String(text ?? "").slice(0, 7000)}`;
 }
 
 function extractEmbeddedJsonText(text) {
@@ -809,6 +805,15 @@ function mockCompletion({ role, topic, round }) {
       "Run a time-boxed pilot with an explicit budget and rollback condition.",
       "Review measured results at the decision gate before scaling."
     ],
+    executionPhases: verdict ? [
+      { name: "Validate", objective: "Replace the highest-risk assumptions with measured evidence.", duration: "2 weeks", preconditions: ["Decision owner and budget ceiling confirmed"], tasks: ["Document the target user and baseline", "Run ten structured discovery conversations", "Record evidence and objections"], owner: "Product lead", tools: ["Interview guide", "Evidence log"], dependencies: [], deliverables: ["Validated problem brief", "Evidence log"], acceptanceCriteria: ["At least ten qualified conversations completed", "At least three users confirm the problem is material"], budgetOrResources: ["Product lead: 20 hours"], risks: ["Biased sample"], decisionGate: "Confirm whether demand clears the validation threshold", stopContinueScaleCriteria: "Stop or reposition if fewer than three qualified users confirm material demand." },
+      { name: "Pilot", objective: "Deliver the smallest end-to-end outcome for a bounded cohort.", duration: "4 weeks", preconditions: ["Validation gate passed"], tasks: ["Define pilot scope and rollback condition", "Deliver the bounded pilot", "Measure adoption, cost, quality, and risk"], owner: "Delivery lead", tools: ["Project tracker", "Analytics"], dependencies: ["Validate phase accepted"], deliverables: ["Working pilot", "Results report"], acceptanceCriteria: ["Pilot outcome meets its target", "Cost and risk remain inside approved limits"], budgetOrResources: ["Delivery team and approved pilot budget"], risks: ["Scope expansion"], decisionGate: "Compare measured results with scale thresholds", stopContinueScaleCriteria: "Stop if safety or budget limits fail; scale only when outcome targets are met." }
+    ] : [],
+    ownerInvolvement: verdict ? { canBeDelegated: ["Research and evidence logging"], informationRequired: ["Confirm the maximum pilot budget"], approvalRequired: ["Approve pilot expenditure and any irreversible launch"], externalDependencies: [] } : null,
+    desiredOutcome: verdict ? "Reach an evidence-backed scale or stop decision." : null,
+    currentState: verdict ? "The proposal is defined but its highest-risk assumptions remain unvalidated." : null,
+    strategy: verdict ? "Validate demand first, then run a bounded pilot before scaling." : null,
+    firstActions: verdict ? ["Name the decision owner", "Set the pilot budget ceiling", "Schedule the first five discovery conversations"] : [],
     successMetrics: ["Pilot target and baseline are documented", "Cost and risk stay inside agreed thresholds", "Scale decision is supported by measured evidence"],
     guardrails: ["Do not scale on mock output alone", "Record sources and unresolved assumptions", "Stop if safety, compliance, or budget gates fail"],
     knowledgeGaps: roundNumber < 3 ? ["Confirm constraints, source freshness, and cost limits."] : [],
@@ -856,6 +861,13 @@ function normalizePayload(payload, { role, round }) {
     successMetrics: asArray(payload.successMetrics),
     guardrails: asArray(payload.guardrails),
     openQuestions: asArray(payload.openQuestions),
+    desiredOutcome: payload.desiredOutcome ?? null,
+    currentState: payload.currentState ?? null,
+    strategy: payload.strategy ?? null,
+    executionPhases: asArray(payload.executionPhases ?? payload.phases),
+    ownerInvolvement: payload.ownerInvolvement ?? null,
+    firstActions: asArray(payload.firstActions),
+    executionReadiness: payload.executionReadiness ?? null,
     flags: asArray(payload.flags),
     dissent: Boolean(payload.dissent),
     veto: Boolean(payload.veto || payload.hardVeto || asArray(payload.flags).includes("VETO")),

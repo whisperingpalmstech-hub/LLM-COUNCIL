@@ -1,11 +1,13 @@
 import { SearchClient } from "../adapters/search.js";
 import { LlmAdapter } from "../adapters/llm.js";
+import { PromptRegistry } from "./prompt_registry.js";
 
 export class LlmResearcher {
   constructor({ db }) {
     this.db = db;
     this.searchClient = new SearchClient();
-    this.llm = new LlmAdapter();
+    this.llm = new LlmAdapter({ db });
+    this.prompts = new PromptRegistry(db);
   }
 
   async researchLatestModels() {
@@ -25,18 +27,7 @@ export class LlmResearcher {
       model_name: process.env.LOCAL_ROUTER_MODEL || process.env.GEMINI_MODEL || "gemini-2.5-flash"
     };
 
-    const prompt = `You are the Meta Strategist.
-Review the following web search results for the latest LLM models and benchmarks:
-${context || "No search results available."}
-
-Produce a strict JSON array of recommended models. Each object in the array MUST contain:
-- model_name: string (e.g. "llama3.2:3b", "deepseek-coder:6.7b", "gemini-2.5-pro")
-- provider: string ("ollama", "openai", "anthropic", "gemini")
-- type: string ("local" or "api")
-- reasoning_score: integer (1-10)
-- description: string (brief explanation of why it is recommended)
-
-Response must be strict JSON array only. Do not wrap in markdown or conversational text.`;
+    const prompt = `${this.prompts.text("research.model_recommendation")}\n\nResearch context:\n${context || "Live research unavailable; do not present current claims as verified."}\n\nReturn a strict JSON array. Each item requires model_name, provider, type, reasoning_score, and description.`;
 
     let recommendations = [];
     try {

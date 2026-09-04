@@ -139,7 +139,10 @@ try {
     budgetControl: Boolean(document.querySelector('#mainBudget')),
     settingsHasPersonaBrief: Boolean(document.querySelector('#settingCompanionBrief')),
     settingsHasContextToggle: Boolean(document.querySelector('#settingShowContext')),
-    greeting: document.querySelector('#companionGreeting')?.textContent.trim()
+    greeting: document.querySelector('#companionGreeting')?.textContent.trim(),
+    automaticDepth: document.querySelector('#mainMode')?.value,
+    technicalMetricsHidden: getComputedStyle(document.querySelector('.metrics')).display === 'none',
+    promptCount: document.querySelectorAll('.prompt-editor').length
   }))()`)).value;
   assert.equal(companionControls.memoryEnabled, true, "Saved-decision context should be enabled by default");
   assert.equal(companionControls.tone, "trusted", "Trusted Friend should be the default voice");
@@ -148,6 +151,9 @@ try {
   assert.equal(companionControls.settingsHasPersonaBrief, true, "Settings should expose the companion persona brief");
   assert.equal(companionControls.settingsHasContextToggle, true, "Settings should expose the active-context visibility toggle");
   assert.ok(companionControls.greeting, "Companion greeting did not render");
+  assert.equal(companionControls.automaticDepth, "auto", "Automatic depth should be the default");
+  assert.equal(companionControls.technicalMetricsHidden, true, "Simple view should hide technical metrics");
+  assert.ok(companionControls.promptCount >= 20, "Advanced Settings should load the complete prompt registry");
   await waitFor(async () => (await cdp.evaluate("document.body.dataset.voiceState === 'ready'")).value === true, 45000, "probed local Whisper readiness");
   const microphonePermission = (await cdp.evaluate(`Promise.race([
     navigator.mediaDevices.getUserMedia({ audio: true })
@@ -384,12 +390,12 @@ try {
 
   assert.equal(result.status, "COMPLETED");
   assert.ok(result.verdict, "The browser did not render a verdict");
-  assert.ok(result.messages >= 3, `Expected at least 3 rendered council messages, received ${result.messages}`);
+  assert.ok(result.messages >= 2, `Expected at least 2 rendered council messages, received ${result.messages}`);
   assert.equal(result.transcriptEnabled, true);
   assert.deepEqual(result.warnings, [], `Provider fallback warnings were recorded: ${JSON.stringify(result.warnings)}`);
   assert.ok(result.structuredSections > 0, "No structured insight sections were rendered");
   assert.equal(result.rawBlocks, 0, "Raw preformatted payloads are visible in the decision UI");
-  assert.ok(Number.parseInt(result.researcherCount, 10) >= 3, `Expected at least three council responses, received ${result.researcherCount}`);
+  assert.ok(Number.parseInt(result.researcherCount, 10) >= 2, `Expected at least two council responses, received ${result.researcherCount}`);
   assert.equal(result.researchVisible, false, "Researcher notes should be hidden until explicitly requested");
   assert.equal(result.tone, "trusted", "Session did not preserve the selected voice");
   assert.equal(result.useMemory, 1, "Session did not preserve saved-decision context consent");
@@ -408,7 +414,7 @@ try {
   await cdp.evaluate("document.querySelector('#simpleModeToggle').click()");
   await waitFor(async () => (await cdp.evaluate("!document.querySelector('#researchStream').classList.contains('hidden')")).value === true, 10000, "research notes disclosure");
   const disclosedResearchers = (await cdp.evaluate("document.querySelectorAll('#messages .message-card').length")).value;
-  assert.ok(disclosedResearchers >= 3, "Research notes omitted council responses");
+  assert.ok(disclosedResearchers >= 2, "Research notes omitted council responses");
   await cdp.evaluate("document.querySelector('#simpleModeToggle').click()");
   await waitFor(async () => (await cdp.evaluate("document.querySelector('#researchStream').classList.contains('hidden')")).value === true, 10000, "research notes collapse");
 

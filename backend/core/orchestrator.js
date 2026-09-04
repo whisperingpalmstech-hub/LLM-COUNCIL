@@ -1,8 +1,10 @@
 import { id, now } from "../db/sqlite.js";
-import { LlmAdapter, callHermesWebhook } from "../adapters/llm.js";
+import { LlmAdapter } from "../adapters/llm.js";
 import { writeToVault, searchVault } from "../adapters/obsidian.js";
 import { AnythingLlmClient } from "../adapters/anythingllm.js";
 import { SearchClient } from "../adapters/search.js";
+import { PromptRegistry } from "./prompt_registry.js";
+import { getExecutionPlan, listPlanVersions, persistExecutionPlan, planMarkdown } from "./execution_plan.js";
 import fs from "fs";
 import path from "path";
 
@@ -19,6 +21,12 @@ const ROLE_TYPES = [
   "ETHICIST",
   "PSYCHOLOGIST_MACHIAVELLI",
   "DOOM_COUNCIL"
+  ,"PRODUCT_STRATEGIST"
+  ,"TECHNICAL_ARCHITECT"
+  ,"FINANCIAL_ANALYST"
+  ,"CUSTOMER_MARKET_ANALYST"
+  ,"COMPLIANCE_REVIEWER"
+  ,"EXECUTION_PLANNER"
 ];
 
 
@@ -29,6 +37,7 @@ export class CouncilOrchestrator {
     this.env = env;
     this.llm = new LlmAdapter({ db: this.db, env: this.env });
     this.search = new SearchClient(this.env);
+    this.prompts = new PromptRegistry(this.db);
     this.runningSessions = new Set();
   }
 
@@ -47,10 +56,13 @@ export class CouncilOrchestrator {
 
   customPrompt(role, fallbackKey, context) {
     try {
+      const promptId = promptIdForRole(role.role_type, fallbackKey);
+      const registryText = this.prompts.text(promptId);
       const roleKey = `PROMPT_${role.role_type}`;
       const row = this.db.prepare("select value from system_settings where key in (?, ?) and trim(value) <> '' order by case key when ? then 0 else 1 end limit 1")
         .get(roleKey, fallbackKey, roleKey);
-      if (!row?.value?.trim()) return undefined;
+      const template = registryText || row?.value;
+      if (!template?.trim()) return undefined;
 
       const priorMessages = Array.isArray(context.priorMessages)
         ? context.priorMessages.map((message) => {
@@ -66,15 +78,19 @@ export class CouncilOrchestrator {
         role_type: role.role_type,
         topic: context.topic,
         round: context.round,
+        stage: deliberationStage(context.round),
+        riskThreshold: global.KELLY_PERCENT || 5,
         priorMessages,
         desiredOutcome: context.desiredOutcome || "A clear, evidence-aware next step I can act on.",
         personaBrief: context.personaBrief || ""
       };
       const rendered = Object.entries(values).reduce(
         (prompt, [key, value]) => prompt.split(`{{${key}}}`).join(String(value ?? "")),
-        row.value
+        template
       );
-      return `${rendered}\n\n${trustedFriendGuidance(context.tone, context.desiredOutcome, context.personaBrief)}\n\n${decisionOutputContract(role.role_type)}`;
+      const roleGuidance = this.prompts.text(rolePromptId(role.role_type));
+      const roundGuidance = this.prompts.text(roundPromptId(context.round));
+      return `${this.prompts.text("companion.system")}\n\n${rendered}\n\n${roleGuidance}\n\n${roundGuidance}\n\n${trustedFriendGuidance(context.tone, context.desiredOutcome, context.personaBrief)}\n\n${decisionOutputContract(role.role_type)}`;
     } catch (_error) {
       return undefined;
     }
@@ -82,25 +98,14 @@ export class CouncilOrchestrator {
 
   async createSession(input) {
     if (!input.topic || input.topic.length > 2000) throw Object.assign(new Error("Topic is required and must be <= 2000 chars."), { status: 400 });
-    
-    const isFastMode = (input.mode === "fast");
-    
-    // Qualification Gate (Entropy Check) — skip for fast mode
-    if (!isFastMode) {
-      const settings = this.db.prepare("select key, value from system_settings").all().reduce((acc, row) => ({ ...acc, [row.key]: row.value }), {});
-      const entropyThreshold = parseInt(settings.ENTROPY_THRESHOLD || '30', 10);
-      global.KELLY_PERCENT = parseInt(settings.KELLY_CIRCUIT_BREAKER_PERCENT || '5', 10);
-
-      const entropy = await this.llm.checkEntropy(input.topic);
-      if (entropy.entropyScore < entropyThreshold) {
-        throw Object.assign(new Error(`Prompt rejected (Entropy: ${entropy.entropyScore} < ${entropyThreshold}). ${entropy.feedback}`), { status: 400 });
-      }
-    }
+    const inferred = inferOperatingMode(input.topic, input.mode);
+    const isFastMode = inferred.mode === "fast";
+    global.KELLY_PERCENT = parseInt(this.setting("KELLY_CIRCUIT_BREAKER_PERCENT", "5"), 10);
 
     const sessionId = id();
     const council = input.councilId ? this.getCouncil(input.councilId) : null;
     const councilDefaults = council ? parse(council.default_config, {}) : {};
-    const maxRounds = Number(input.maxRounds ?? councilDefaults.max_rounds ?? 4);
+    const maxRounds = Number(input.maxRounds ?? councilDefaults.max_rounds ?? inferred.maxRounds);
     if (maxRounds < 1 || maxRounds > 5) throw Object.assign(new Error("maxRounds must be 1-5."), { status: 400 });
     const timestamp = now();
     const personaBrief = this.sessionPersonaBrief(input.personaBrief);
@@ -111,7 +116,7 @@ export class CouncilOrchestrator {
       sessionId,
       input.topic,
       "CREATED",
-      input.mode ?? "standard",
+      inferred.mode,
       maxRounds,
       input.compactInternalCommunication === false ? 0 : 1,
       council?.id ?? null,
@@ -129,7 +134,7 @@ export class CouncilOrchestrator {
     const roles = council ? this.spawnStaticRoles(sessionId, council) : await this.spawnDynamicRoles(sessionId, input.topic, { ...input, isFastMode });
     const costPlan = this.initializeCostPlan(sessionId, roles, maxRounds, input.budgetLimitUsd);
     if (input.followUpTo) this.attachConversationContext(sessionId, input.followUpTo);
-    this.audit(sessionId, "session.created", { roles: roles.length, councilId: council?.id ?? null, conversationId, costPlan });
+    this.audit(sessionId, "session.created", { roles: roles.length, councilId: council?.id ?? null, conversationId, costPlan, operatingMode: inferred });
     if (input.autoStart !== false && !costPlan.requiresApproval) setTimeout(() => this.runSession(sessionId).catch((error) => this.fail(sessionId, error)), 10);
 
     return this.getSession(sessionId);
@@ -310,10 +315,10 @@ export class CouncilOrchestrator {
     const baseRoles = [];
     
     if (isFastMode) {
-      // Fast mode: only 3 core roles, no router LLM
+      // Quick mode stays proportionate and avoids unnecessary machinery.
       baseRoles.push(role("SYNTHESIST", "Lead Synthesist", 1, "TRAINING"));
       baseRoles.push(role("DOMAIN_EXPERT", "Domain Expert", 2, "TRAINING"));
-      baseRoles.push(role("RISK_OFFICER", "Risk Officer", 3, "TRAINING"));
+      if (materialRiskTrigger(topic)) baseRoles.push(role("RISK_OFFICER", "Risk Officer", 3, "TRAINING"));
       applyModelRouting(baseRoles, this.env);
       return this.insertRoles(sessionId, baseRoles);
     }
@@ -331,9 +336,12 @@ export class CouncilOrchestrator {
 
     baseRoles.push(role("SYNTHESIST", "Lead Synthesist", 1, needsWeb && needsRag ? "HYBRID" : needsRag ? "RAG" : "TRAINING"));
     baseRoles.push(role("DOMAIN_EXPERT", "Domain Expert", 2, needsRag ? "RAG" : "TRAINING", 1.1));
+    if (technicalTrigger(topic)) baseRoles.push(role("TECHNICAL_ARCHITECT", "Technical Architect", 3, "HYBRID"));
+    if (commercialTrigger(topic)) baseRoles.push(role("PRODUCT_STRATEGIST", "Product Strategist", 4, "TRAINING"));
+    if (financialTrigger(topic)) baseRoles.push(role("FINANCIAL_ANALYST", "Commercial & Financial Analyst", 5, "TRAINING"));
     
     if (tier >= 2) {
-      baseRoles.push(role("SKEPTIC", "Skeptic", 3, "TRAINING"));
+      baseRoles.push(role("SKEPTIC", "Skeptic", 6, "TRAINING"));
     }
     
     if (tier >= 3) {
@@ -341,13 +349,22 @@ export class CouncilOrchestrator {
       if (marketingTrigger(topic) || tier >= 3) baseRoles.push(role("MARKETING_SALES", "Growth & Marketing Strategist", 5, "HYBRID"));
       if (psychologistTrigger(topic)) baseRoles.push(role("PSYCHOLOGIST_MACHIAVELLI", "Psychologist / Machiavelli", 6, "TRAINING"));
       baseRoles.push(role("RISK_OFFICER", "Risk Officer", 7, "HYBRID"));
+      if (complianceTrigger(topic)) baseRoles.push(role("COMPLIANCE_REVIEWER", "Compliance Reviewer", 8, "HYBRID"));
     }
     
     if (tier >= 4) {
       baseRoles.push(role("DOOM_COUNCIL", "Regulatory Assassin", 8, "TRAINING"));
     }
 
-    const plan = baseRoles.slice(0, 8);
+    const unique = [...new Map(baseRoles.map((item) => [item.role_type, item])).values()];
+    const limit = tier >= 4 ? 10 : tier >= 3 ? 8 : 5;
+    const plan = unique.slice(0, limit);
+    if (complianceTrigger(topic) && !plan.some((item) => item.role_type === "COMPLIANCE_REVIEWER")) {
+      plan[plan.length - 1] = unique.find((item) => item.role_type === "COMPLIANCE_REVIEWER");
+    }
+    if (tier >= 4 && !plan.some((item) => item.role_type === "DOOM_COUNCIL")) {
+      plan[plan.length - 1] = unique.find((item) => item.role_type === "DOOM_COUNCIL");
+    }
 
     // Deterministic policy routing avoids spending an extra LLM call merely to
     // choose a model. RouteLLM is opt-in and only used when its local service is configured.
@@ -609,6 +626,10 @@ export class CouncilOrchestrator {
     }
     const verdict = await this.buildVerdict(sessionId);
     const finalSession = this.getSession(sessionId);
+    const executionPlan = persistExecutionPlan(this.db, finalSession, verdict, sessionForAnalysis.current_round > 0 ? "Council decision completed" : null);
+    verdict.executionPlan = executionPlan.plan;
+    verdict.executorHandoffAvailable = true;
+    verdict.planVersion = executionPlan.version;
     this.updateSession(sessionId, { status: "COMPLETED", verdict: JSON.stringify(verdict), consensus: verdict.confidence, completed_at: now() });
     
     // Save to Obsidian Vault
@@ -640,7 +661,7 @@ export class CouncilOrchestrator {
     const customPrompt = this.customPrompt(verdictRole, "PROMPT_VERDICT", {
       topic: `Final Verdict for: ${session.topic}`,
       round: "Final",
-      priorMessages: priorSummaries,
+      priorMessages: messages,
       tone: session.tone,
       desiredOutcome: session.desired_outcome,
       personaBrief: session.persona_brief
@@ -653,7 +674,7 @@ export class CouncilOrchestrator {
         role: verdictRole,
         topic: `Final Verdict for: ${session.topic}`,
         round: "Final",
-        priorMessages: priorSummaries,
+        priorMessages: messages,
         compact: false,
         customPrompt
       });
@@ -675,8 +696,8 @@ export class CouncilOrchestrator {
        
        // Cycle 3: Level 2 Execution Council
        // Dynamically identify required roles
-       const requiredRolesPrompt = `Based on the final verdict: "${verdictPayload.shortSummary || verdictPayload.decision}", identify 3 highly specialized real-world execution roles needed to implement this (e.g. 'Indian Commercial Law Expert', 'Marketing Director'). Output as a comma separated list.`;
-       const rolesRes = await this.llm.complete({ role: { role_type: "SYSTEM", display_name: "System" }, topic: requiredRolesPrompt, round: "Execution_Roles", priorMessages: [], compact: true });
+       const requiredRolesPrompt = this.prompts.render("execution.role_selection", { decision: verdictPayload.shortSummary || verdictPayload.decision });
+       const rolesRes = await this.llm.complete({ role: { role_type: "SYSTEM", display_name: "System" }, topic: requiredRolesPrompt, round: "Execution_Roles", priorMessages: [], compact: true, customPrompt: requiredRolesPrompt });
        const executionRoles = (rolesRes.payload?.shortSummary || "Deployment Engineer, Product Manager, Legal Advisor").split(",").map(r => r.trim());
 
        // Dynamically create and route AnythingLLM workspaces
@@ -700,14 +721,15 @@ Output highly structured orchestration instructions suitable for external execut
 Assigned workspaces: ${JSON.stringify(agenticWorkspaces)}
 Consensus: ${verdictPayload.shortSummary || verdictPayload.decision}`;
        
-       const execRes = await this.llm.complete({ role: execRole, topic: orchestrationPrompt, round: "Execution", priorMessages: priorSummaries, compact: false });
+       const execRes = await this.llm.complete({ role: execRole, topic: orchestrationPrompt, round: "Execution", priorMessages: priorSummaries, compact: false, customPrompt: `${this.prompts.text("execution.planner")}\n\n${orchestrationPrompt}` });
        const payload = execRes.payload || { agentic_instructions: "Run setup script", required_workspaces: agenticWorkspaces };
        
        this.updateSession(sessionId, { execution_payload: JSON.stringify(payload) });
        
-       const handoff = await callHermesWebhook(payload);
-       this.updateSession(sessionId, { handoff_status: handoff.success ? "SUCCESS" : "FAILED" });
-       this.emit("EXECUTION_HANDOFF", { sessionId, status: handoff.success ? "SUCCESS" : "FAILED", payload });
+       // This sprint prepares an executor-ready payload but deliberately does
+       // not dispatch it. External execution requires a future explicit owner approval flow.
+       this.updateSession(sessionId, { handoff_status: "PREPARED" });
+       this.emit("EXECUTION_HANDOFF", { sessionId, status: "PREPARED", payload });
        this.emit("PIPELINE_STAGE_COMPLETE", { sessionId, nextStage: "Complete" });
     }
 
@@ -717,6 +739,13 @@ Consensus: ${verdictPayload.shortSummary || verdictPayload.decision}`;
       majority: finalClaims.join(" "),
       rationale: verdictPayload.rationale || finalClaims.slice(0, 4).join(" "),
       recommendedActions: verdictPayload.recommendedActions ?? verdictPayload.nextSteps ?? [],
+      executionPhases: verdictPayload.executionPhases ?? verdictPayload.phases ?? [],
+      desiredOutcome: verdictPayload.desiredOutcome ?? session.desired_outcome,
+      currentState: verdictPayload.currentState ?? null,
+      strategy: verdictPayload.strategy ?? null,
+      ownerInvolvement: verdictPayload.ownerInvolvement ?? null,
+      firstActions: verdictPayload.firstActions ?? [],
+      executionReadiness: verdictPayload.executionReadiness ?? null,
       successMetrics: verdictPayload.successMetrics ?? [],
       guardrails: verdictPayload.guardrails ?? [],
       alternatives: verdictPayload.alternatives ?? [],
@@ -782,6 +811,10 @@ Consensus: ${verdictPayload.shortSummary || verdictPayload.decision}`;
       from sessions s left join conversations c on c.id = s.conversation_id
       ${filter} order by s.created_at desc`).all();
   }
+
+  executionPlan(sessionId) { return getExecutionPlan(this.db, sessionId); }
+  planVersions(conversationId) { return listPlanVersions(this.db, conversationId); }
+  executionPlanMarkdown(sessionId) { return planMarkdown(this.executionPlan(sessionId)); }
 
   listConversations({ state = "active" } = {}) {
     const filter = state === "all"
@@ -984,6 +1017,32 @@ function role(role_type, display_name, priority, knowledge_source_type, confiden
   return { role_type, display_name, priority, knowledge_source_type, confidence_weight };
 }
 
+function promptIdForRole(roleType, fallbackKey) {
+  if (roleType === "INTERVIEWER") return "interview.material_clarification";
+  if (roleType === "VERDICT") return "verdict.executive";
+  if (roleType === "EXECUTION_PLANNER") return "execution.planner";
+  return fallbackKey === "PROMPT_INTERVIEWER" ? "interview.material_clarification" : fallbackKey === "PROMPT_VERDICT" ? "verdict.executive" : "council.member";
+}
+
+function rolePromptId(roleType) {
+  return ({ SYNTHESIST: "role.synthesist", DOMAIN_EXPERT: "role.domain_expert", SKEPTIC: "role.skeptic", RISK_OFFICER: "role.risk_officer", MARKETING_SALES: "role.growth", ETHICIST: "role.policy", WEB_RESEARCHER: "role.researcher", DOOM_COUNCIL: "role.doom" })[roleType] || "";
+}
+
+function roundPromptId(round) {
+  const number = Number(round);
+  if (number === 1) return "round.independent";
+  if (number === 2) return "round.challenge";
+  return Number.isFinite(number) ? "round.synthesis" : "";
+}
+
+function deliberationStage(round) {
+  const number = Number(round);
+  if (number === 1) return "Independent assessment";
+  if (number === 2) return "Challenge";
+  if (Number.isFinite(number)) return "Synthesis";
+  return String(round || "Analysis");
+}
+
 function selectModel(roleItem, env = process.env) {
   if (env.PROVIDER_MODE && env.PROVIDER_MODE !== "mock") return env.PROVIDER_MODE;
   if (env.ANYTHINGLLM_API_KEY) return "anythingllm";
@@ -1079,6 +1138,22 @@ function psychologistTrigger(topic) {
 function marketingTrigger(topic) {
   return /\b(market|marketing|sales|pricing|price|revenue|customer|acquisition|growth|launch|campaign|product|business|strategy|monetization|gated)\b/i.test(topic);
 }
+
+function inferOperatingMode(topic, requested) {
+  const explicit = String(requested || "").toLowerCase();
+  if (["fast", "quick"].includes(explicit) || /\b(just (?:give|tell)|quick view|brief answer|no full analysis)\b/i.test(topic)) return { mode: "fast", label: "QUICK", maxRounds: 1, reason: "Narrow or explicitly proportionate request" };
+  if (explicit === "deep") return { mode: "deep", label: "DEEP", maxRounds: 3, reason: "User selected deep review" };
+  const consequential = /\b(health|medical|patient|regulated|regulation|legal|law|finance|invest|launch|country|jurisdiction|security|privacy|million|enterprise|production|contract|hire|fire|acquire|sell|moneti[sz]e)\b/i.test(topic);
+  const complex = topic.length > 280 || (topic.match(/[?.!,;]/g) || []).length > 4;
+  if (consequential || complex) return { mode: "deep", label: "DEEP", maxRounds: 3, reason: consequential ? "Material commercial, safety, regulatory, or irreversible implications" : "Multiple constraints or high uncertainty" };
+  return { mode: "standard", label: "STANDARD", maxRounds: 2, reason: "Meaningful decision with manageable uncertainty" };
+}
+
+function technicalTrigger(topic) { return /\b(software|app|website|repository|code|api|architecture|database|cloud|deploy|ai|automation|security)\b/i.test(topic); }
+function commercialTrigger(topic) { return /\b(product|business|startup|launch|market|customer|website|service|moneti[sz]e|pricing|revenue|sales)\b/i.test(topic); }
+function financialTrigger(topic) { return /\b(budget|cost|price|pricing|revenue|margin|cash|fund|invest|capital|£|\$|₹|€)\b/i.test(topic); }
+function complianceTrigger(topic) { return /\b(health|medical|patient|legal|law|regulated|compliance|privacy|data protection|gdpr|india|uk|europe|financial)\b/i.test(topic); }
+function materialRiskTrigger(topic) { return /\b(cost|budget|risk|health|legal|security|invest|production|launch|irreversible)\b/i.test(topic); }
 
 
 function parse(value, fallback) {

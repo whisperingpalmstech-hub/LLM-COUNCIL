@@ -14,6 +14,7 @@ let councilActivityVisible = false;
 let nextMessageMode = "fresh";
 let sessionListState = "active";
 let openingGreetingSpoken = false;
+let advancedView = localStorage.getItem("synod-advanced-view") === "true";
 const renderedMessageIds = new Set();
 const originalTitle = document.title;
 
@@ -124,7 +125,36 @@ function setAdviceMode(mode) {
 
 document.querySelectorAll("[data-advice-mode]").forEach((button) => button.addEventListener("click", () => setAdviceMode(button.dataset.adviceMode)));
 setCompanionRailCollapsed(localStorage.getItem("synod-companion-rail-collapsed") === "true");
-setAdviceMode(localStorage.getItem("synod-advice-mode") === "detailed" ? "detailed" : "quick");
+if (localStorage.getItem("synod-advice-mode")) setAdviceMode(localStorage.getItem("synod-advice-mode") === "detailed" ? "detailed" : "quick");
+else {
+  $("mainMode").value = "auto";
+  document.querySelectorAll("[data-advice-mode]").forEach((button) => button.classList.remove("active"));
+}
+
+function setAdvancedView(enabled) {
+  advancedView = Boolean(enabled);
+  document.body.classList.toggle("advanced-view", advancedView);
+  const button = $("advancedViewToggle");
+  if (button) {
+    button.setAttribute("aria-pressed", String(advancedView));
+    button.classList.toggle("active", advancedView);
+    button.querySelector("span").textContent = advancedView ? "Simple view" : "Advanced view";
+  }
+  localStorage.setItem("synod-advanced-view", String(advancedView));
+}
+
+$("advancedViewToggle")?.addEventListener("click", () => setAdvancedView(!advancedView));
+setAdvancedView(advancedView);
+
+document.querySelectorAll("[data-starter]").forEach((button) => button.addEventListener("click", () => {
+  $("mainTopicInput").value = button.dataset.starter;
+  $("mainTopicInput").focus();
+}));
+
+function decisionTuning() {
+  const selectedMode = $("mainMode")?.value || "auto";
+  return { mode: selectedMode, maxRounds: selectedMode === "auto" ? undefined : Number($("mainRounds")?.value || 2) };
+}
 
 function setCouncilActivityVisible(visible) {
   const toggle = $("councilActivityToggle");
@@ -190,6 +220,25 @@ async function loadSettings() {
       video.load();
     }
   }
+  await loadPromptRegistry();
+}
+
+async function loadPromptRegistry() {
+  const host = $("promptRegistry");
+  if (!host) return;
+  const { prompts } = await api("/prompts");
+  host.innerHTML = prompts.map((prompt) => `<details class="prompt-editor" data-prompt-id="${esc(prompt.id)}"><summary><span><strong>${esc(prompt.name)}</strong><small>${esc(prompt.scope)} · v${prompt.version}${prompt.customized ? " · customized" : ""}</small></span><i data-lucide="chevron-down"></i></summary><p>${esc(prompt.description)}</p><textarea aria-label="${esc(prompt.name)} prompt" maxlength="30000">${esc(prompt.promptText)}</textarea><div><button class="button" type="button" data-prompt-save>Save prompt</button><button class="button" type="button" data-prompt-reset>Restore default</button></div></details>`).join("");
+  host.querySelectorAll("[data-prompt-save]").forEach((button) => button.addEventListener("click", async () => {
+    const editor = button.closest("[data-prompt-id]");
+    await api(`/prompts/${encodeURIComponent(editor.dataset.promptId)}`, { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ promptText: editor.querySelector("textarea").value }) });
+    showToast("Prompt saved for future decisions.", "success"); await loadPromptRegistry();
+  }));
+  host.querySelectorAll("[data-prompt-reset]").forEach((button) => button.addEventListener("click", async () => {
+    const editor = button.closest("[data-prompt-id]");
+    await api(`/prompts/${encodeURIComponent(editor.dataset.promptId)}/reset`, { method: "POST" });
+    showToast("Default prompt restored.", "success"); await loadPromptRegistry();
+  }));
+  if (window.lucide) window.lucide.createIcons();
 }
 
 function setSecretField(field, value) {
@@ -949,6 +998,7 @@ async function refresh() {
         <h3><i data-lucide="award"></i> ${t("final_verdict")}</h3>
         <div class="verdict-summary">${esc(decisionText || "Verdict complete")}</div>
         ${rationaleText ? `<p class="verdict-majority">${esc(rationaleText)}</p>` : ""}
+        ${renderPrimaryExecutionPlan(verdict.executionPlan, session)}
         ${renderVerdictBrief(verdict)}
         ${Number.isFinite(Number(verdict.confidence)) ? `<div class="verdict-confidence"><span>Confidence</span><strong>${Math.round(Number(verdict.confidence) * 100)}%</strong></div>` : ""}
         ${warningHtml}
@@ -1025,7 +1075,8 @@ function renderCouncilProgress(session, messages, currentRound, consensus) {
   document.body.classList.add("has-session");
   updateMissionRoute(session.status, Boolean(session.execution_payload));
   $("liveDeliberation").classList.toggle("hidden", !active);
-  $("deliberationLabel").textContent = active ? `Deliberating · Round ${Math.max(1, currentRound || 1)} of ${maxRounds}` : session.status;
+  const stageLabel = currentRound <= 1 ? "Getting specialist perspectives" : currentRound === 2 ? "Testing assumptions" : currentRound < maxRounds ? "Challenging the strategy" : "Building the execution plan";
+  $("deliberationLabel").textContent = active ? (advancedView ? `${stageLabel} · Round ${Math.max(1, currentRound || 1)} of ${maxRounds}` : stageLabel) : session.status;
   const spokenThisRound = new Set(messages.filter((message) => message.round_number === Math.max(1, currentRound)).map((message) => message.role_id));
   const roundProgress = roles.length ? Math.min(100, (spokenThisRound.size / roles.length) * 100) : 0;
   $("roundProgressFill").style.width = `${roundProgress}%`;
@@ -1308,6 +1359,35 @@ function renderVerdictBrief(verdict) {
     </section>`).join("")}</div>`;
 }
 
+function renderPrimaryExecutionPlan(plan, session) {
+  if (!plan?.phases?.length) return "";
+  const readiness = plan.readiness || {};
+  const ownerItems = [
+    ...(plan.ownerInvolvement?.informationRequired || []).map((item) => ({ type: "Information required", item })),
+    ...(plan.ownerInvolvement?.approvalRequired || []).map((item) => ({ type: "Approval required", item }))
+  ];
+  return `<section class="primary-plan" aria-labelledby="executionPlanTitle">
+    <div class="primary-plan-head"><div><h3 id="executionPlanTitle">Execution plan</h3><p>Version ${esc(String(session?.verdict?.planVersion || 1))} · ready for a human team or future executor handoff</p></div><div class="readiness-score"><strong>${esc(String(readiness.overall || 0))}%</strong><span>ready to start</span></div></div>
+    <div class="first-actions"><h4>What happens first</h4><ol>${(plan.firstActions || []).slice(0, 3).map((item) => `<li>${formatInsight(item)}</li>`).join("")}</ol></div>
+    <div class="phase-list">${plan.phases.map((phase) => `<details class="plan-phase" ${phase.order === 1 ? "open" : ""}><summary><span><b>${esc(phase.name)}</b><small>${esc(phase.duration)} · ${esc(phase.owner)}</small></span><i data-lucide="chevron-down"></i></summary><p>${esc(phase.objective)}</p><div class="phase-columns"><div><h4>Tasks</h4><ol>${phase.tasks.map((item) => `<li>${formatInsight(item)}</li>`).join("")}</ol></div><div><h4>Acceptance criteria</h4><ul>${phase.acceptanceCriteria.length ? phase.acceptanceCriteria.map((item) => `<li>${formatInsight(item)}</li>`).join("") : "<li>Owner must define measurable acceptance criteria before work begins.</li>"}</ul></div></div><div class="phase-gate"><strong>Decision gate</strong><span>${esc(phase.decisionGate)}</span><small>${esc(phase.stopContinueScaleCriteria)}</small></div></details>`).join("")}</div>
+    ${ownerItems.length ? `<div class="owner-decisions"><h4>I need from you</h4>${ownerItems.map(({ type, item }) => `<div><span>${esc(type)}</span>${formatInsight(item)}</div>`).join("")}</div>` : ""}
+    <div class="plan-actions"><button class="button" type="button" onclick="window.copyExecutionPlan('${esc(session.id)}')"><i data-lucide="copy"></i> Copy plan</button><a class="button" href="/api/v1/sessions/${encodeURIComponent(session.id)}/execution-plan.md" download><i data-lucide="download"></i> Download Markdown</a><button class="button advanced-only" type="button" onclick="window.copyExecutorHandoff('${esc(session.id)}')"><i data-lucide="braces"></i> Copy executor handoff</button></div>
+  </section>`;
+}
+
+window.copyExecutorHandoff = async function(sessionId) {
+  const record = await api(`/sessions/${encodeURIComponent(sessionId)}/execution-plan`);
+  await navigator.clipboard.writeText(JSON.stringify(record.executorHandoff, null, 2));
+  showToast("Executor handoff copied. Execution remains unauthorized.", "success");
+};
+
+window.copyExecutionPlan = async function(sessionId) {
+  const response = await fetch(`/api/v1/sessions/${encodeURIComponent(sessionId)}/execution-plan.md`);
+  if (!response.ok) throw new Error("Plan export is unavailable.");
+  await navigator.clipboard.writeText(await response.text());
+  showToast("Execution plan copied as Markdown.", "success");
+};
+
 function renderExecutionBrief(execution) {
   let payload = execution.rawPayload;
   if (typeof payload === "string") {
@@ -1514,8 +1594,7 @@ async function handleUnifiedSubmit() {
     const isSuperbrain = $("mainSuperbrain")?.checked ?? false;
     const payload = {
       topic: input,
-      mode: $("mainMode")?.value || "standard",
-      maxRounds: Number($("mainRounds")?.value || 4),
+      ...decisionTuning(),
       councilId: $("mainCouncilSelect")?.value || undefined,
       compactInternalCommunication: $("mainCompact")?.checked ?? true,
       allowWebSearch: $("mainWeb")?.checked ?? true,
@@ -1803,8 +1882,7 @@ function setupSpeechRecognition(buttonId, textareaId) {
       : voiceBatchFollowUpSessionId || undefined;
     return {
       topic,
-      mode: $("mainMode")?.value || "standard",
-      maxRounds: Number($("mainRounds")?.value || 4),
+      ...decisionTuning(),
       councilId: $("mainCouncilSelect")?.value || undefined,
       compactInternalCommunication: $("mainCompact")?.checked ?? true,
       allowWebSearch: $("mainWeb")?.checked ?? true,

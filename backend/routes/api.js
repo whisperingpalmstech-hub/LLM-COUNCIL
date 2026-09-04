@@ -5,11 +5,13 @@ import { getVaultStatus } from "../adapters/obsidian.js";
 import { LlmResearcher } from "../core/llm_researcher.js";
 import { LocalWhisperTranscriber } from "../adapters/transcription.js";
 import crypto from "crypto";
+import { PromptRegistry } from "../core/prompt_registry.js";
 
 export function createApiRouter({ db, events, orchestrator }) {
   const router = express.Router();
   const researcher = new LlmResearcher({ db });
   const transcriber = new LocalWhisperTranscriber({ env: orchestrator.env });
+  const prompts = new PromptRegistry(db);
 
 
   router.get("/health", (_req, res) => res.json({ status: "ok", app: "Synod", mode: orchestrator.env.PROVIDER_MODE ?? "mock" }));
@@ -166,6 +168,17 @@ export function createApiRouter({ db, events, orchestrator }) {
     }
   });
 
+  router.get("/prompts", (_req, res) => res.json({ prompts: prompts.list() }));
+  router.get("/prompts/:id", (req, res, next) => {
+    try { res.json(prompts.get(req.params.id)); } catch (error) { next(error); }
+  });
+  router.put("/prompts/:id", (req, res, next) => {
+    try { res.json(prompts.update(req.params.id, req.body?.promptText)); } catch (error) { next(error); }
+  });
+  router.post("/prompts/:id/reset", (req, res, next) => {
+    try { res.json(prompts.reset(req.params.id)); } catch (error) { next(error); }
+  });
+
   router.get("/sessions", (req, res) => res.json({ sessions: orchestrator.listSessions({ state: req.query.state }) }));
   router.get("/conversations", (req, res) => res.json({ conversations: orchestrator.listConversations({ state: req.query.state }) }));
   router.get("/conversations/:id", (req, res, next) => {
@@ -211,6 +224,15 @@ export function createApiRouter({ db, events, orchestrator }) {
   });
   router.get("/sessions/:id/verdict", (req, res, next) => {
     try { res.json(orchestrator.getSession(req.params.id).verdict ?? {}); } catch (error) { next(error); }
+  });
+  router.get("/sessions/:id/execution-plan", (req, res, next) => {
+    try { res.json(orchestrator.executionPlan(req.params.id)); } catch (error) { next(error); }
+  });
+  router.get("/sessions/:id/execution-plan.md", (req, res, next) => {
+    try { res.type("text/markdown").send(orchestrator.executionPlanMarkdown(req.params.id)); } catch (error) { next(error); }
+  });
+  router.get("/conversations/:id/plan-versions", (req, res, next) => {
+    try { res.json({ plans: orchestrator.planVersions(req.params.id) }); } catch (error) { next(error); }
   });
   router.get("/sessions/:id/transcript", (req, res, next) => {
     try { res.type("text/markdown").send(orchestrator.transcript(req.params.id)); } catch (error) { next(error); }

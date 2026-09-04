@@ -48,7 +48,8 @@ FINISH: unreviewed and undocumented is unfinished; this build ends with the fini
         <select id="langToggle" aria-label="Language">
           <option value="en">EN</option><option value="mr">मराठी</option><option value="hi">हिंदी</option><option value="ru">Русский</option><option value="nl">Nederlands</option><option value="ar">العربية</option><option value="es">Español</option><option value="de">Deutsch</option>
         </select>
-        <button id="openWizardBtn" class="button accent-button"><i data-lucide="sparkles"></i><span>Setup</span></button>
+        <button id="advancedViewToggle" class="button" type="button" aria-pressed="false"><i data-lucide="sliders-horizontal"></i><span>Advanced view</span></button>
+        <button id="openWizardBtn" class="button accent-button advanced-only"><i data-lucide="sparkles"></i><span>Setup</span></button>
       </div>
     </header>
 
@@ -75,16 +76,16 @@ FINISH: unreviewed and undocumented is unfinished; this build ends with the fini
               <button id="avatarPlayOverlay" type="button" aria-pressed="false"><i data-lucide="volume-2"></i><span data-i18n="hear_synod">Hear Synod</span></button>
             </div>
             <details class="advanced-controls companion-settings">
-              <summary><i data-lucide="sliders-horizontal"></i><span>Advanced</span></summary>
+              <summary><i data-lucide="sliders-horizontal"></i><span>Fine-tune this decision</span></summary>
               <div id="welcomer" class="decision-setup">
-                <p id="companionGreeting" class="welcome-copy" aria-live="polite">What kind of chaos or brilliance are we bringing to the workspace today?</p>
+                <p id="companionGreeting" class="welcome-copy" aria-live="polite">Tell me what you want to achieve. I’ll clarify what matters, challenge the assumptions, and turn it into a practical plan.</p>
                 <div class="advice-mode" role="group" aria-label="Advice depth">
                   <button class="advice-mode-option active" data-advice-mode="quick" type="button"><strong>Quick answer</strong><span>One focused answer</span></button>
                   <button class="advice-mode-option" data-advice-mode="detailed" type="button"><strong>Detailed advice</strong><span>Challenge and action plan</span></button>
                 </div>
               </div>
               <div class="protocol-controls">
-                <label><span>Depth</span><select id="mainMode"><option value="standard">Standard</option><option value="fast" selected>Fast</option><option value="deep">Deep</option></select></label>
+                <label><span>Depth</span><select id="mainMode"><option value="auto" selected>Automatic</option><option value="standard">Standard</option><option value="fast">Quick</option><option value="deep">Deep</option></select></label>
                 <label><span>Rounds</span><select id="mainRounds"><option value="1" selected>1</option><option value="2">2</option><option value="3">3</option><option value="4">4</option><option value="5">5</option></select></label>
                 <label class="control-wide"><span>Council</span><select id="mainCouncilSelect" aria-label="Council"><option value="">Dynamic council</option></select></label>
                 <label><span>Voice</span><select id="mainTone" aria-label="Conversation tone"><option value="trusted" selected>Trusted friend</option><option value="focused">Focused</option><option value="formal">Formal</option></select></label>
@@ -139,7 +140,7 @@ FINISH: unreviewed and undocumented is unfinished; this build ends with the fini
               <div id="messages" class="messages"></div>
             </section>
           </div>
-          <div id="emptyCouncil" class="empty-council"><span class="empty-glyph"><i data-lucide="route"></i></span><div><strong>Council standing by</strong><p>Your evidence trail, dissent, and decision brief will assemble here.</p></div></div>
+          <div id="emptyCouncil" class="empty-council"><span class="empty-glyph"><i data-lucide="sparkles"></i></span><div><strong>What are you trying to achieve?</strong><p>Start with an idea, problem, decision, or project. Synod will choose the right depth automatically.</p><div class="starter-prompts" aria-label="Example prompts"><button type="button" data-starter="I have a product idea but I don’t know where to start.">Shape a product idea</button><button type="button" data-starter="Help me create a go-to-market plan.">Create a launch plan</button><button type="button" data-starter="Analyse this repository and give me a phased improvement plan.">Analyse a repository</button><button type="button" data-starter="Help me make a difficult strategic decision.">Make a decision</button></div></div></div>
           <section id="completionActions" class="completion-actions hidden" aria-labelledby="completionTitle">
             <div><strong id="completionTitle" data-i18n="decision_complete">Decision complete</strong><p data-i18n="choose_next_step">Choose whether your next message should use this decision as context.</p></div>
             <div><button id="continueConversationBtn" class="button" type="button" data-i18n="continue_conversation">Continue conversation</button><button id="startFreshBtn" class="primary" type="button" data-i18n="start_fresh">Start fresh</button><button id="archiveConversationBtn" class="button" type="button" data-i18n="archive">Archive</button></div>
@@ -163,7 +164,7 @@ FINISH: unreviewed and undocumented is unfinished; this build ends with the fini
       </section>
 
       <aside id="rightDrawer" class="drawer drawer-right hidden-drawer glass panel" aria-label="Settings and councils">
-        <div class="drawer-head"><div><span class="context-label">System control</span><h2>Settings</h2></div><button id="closeRightDrawerBtn" class="icon-button" aria-label="Close settings"><i data-lucide="x"></i></button></div>
+        <div class="drawer-head"><div><span class="context-label">Preferences</span><h2>Settings</h2></div><button id="closeRightDrawerBtn" class="icon-button" aria-label="Close settings"><i data-lucide="x"></i></button></div>
         <form id="settingsForm" class="stack settings-form" autocomplete="off">
           <div class="provider-note"><i data-lucide="shield-check"></i><div><strong>Credentials stay masked</strong><p>Long API keys are expected. Leave a configured field blank to keep the stored key.</p></div></div>
           <h3>AnythingLLM</h3><label><span>Base URL</span><input id="settingUrl" name="anythingllm_base_url" value="http://localhost:3001/api/v1" /></label><label class="secret-control"><span>API key</span><input id="settingKey" name="anythingllm_api_key" type="password" placeholder="Optional" autocomplete="new-password" spellcheck="false" maxlength="512" /><small class="secret-state">Checking configuration…</small></label>
@@ -173,7 +174,10 @@ FINISH: unreviewed and undocumented is unfinished; this build ends with the fini
           <h3>Voice output</h3><label class="switch-row"><input id="settingEnableVoice" name="enable_voice" type="checkbox" /><span>Enable voice output</span></label><label><span>TTS engine</span><select id="settingTtsEngine" name="tts_engine"><option value="browser">Browser native</option><option value="elevenlabs">ElevenLabs</option></select></label><label class="secret-control"><span>ElevenLabs key</span><input id="settingElevenKey" name="elevenlabs_api_key" type="password" placeholder="Optional" autocomplete="new-password" spellcheck="false" maxlength="512" /><small class="secret-state">Checking configuration…</small></label><label><span>Voice ID</span><input id="settingElevenVoice" name="elevenlabs_voice_id" placeholder="Voice ID" /></label>
           <h3>Engine tuning</h3><label><span>Kelly circuit breaker %</span><input id="settingKelly" type="number" value="5" /></label><label><span>Entropy threshold</span><input id="settingEntropy" type="number" value="30" /></label><label><span>Default conversation budget (USD)</span><input id="settingDefaultBudget" type="number" min="0.01" max="10000" step="0.01" value="1" inputmode="decimal" /><small>New requests reserve a conservative estimate plus a 50% safety margin, up to this default minimum.</small></label>
           <h3>Companion context</h3><label><span>Persona brief</span><textarea id="settingCompanionBrief" maxlength="1200" placeholder="How should Synod challenge, support, and communicate with you?"></textarea><small>Applied to new decisions and shown in the active-context disclosure.</small></label><label><span>Default outcome</span><input id="settingCompanionOutcome" maxlength="600" placeholder="What should Synod optimize for by default?" /></label><label class="switch-row"><input id="settingShowContext" type="checkbox" checked /><span>Show active context in the decision workspace</span></label>
-          <h3>Prompt templates</h3><label><span>Interview</span><textarea id="settingPromptInterviewer"></textarea></label><label><span>Deliberation</span><textarea id="settingPromptDeliberation"></textarea></label><label><span>Verdict</span><textarea id="settingPromptVerdict"></textarea></label>
+          <details class="settings-advanced"><summary><i data-lucide="wrench"></i><span>Advanced settings</span></summary><div class="settings-advanced-body">
+          <h3>Prompt registry</h3><p class="muted">Every model-facing instruction is versioned here. Changes affect future decisions only.</p><div id="promptRegistry" class="prompt-registry" aria-live="polite"></div>
+          <div class="legacy-prompts hidden" aria-hidden="true"><textarea id="settingPromptInterviewer"></textarea><textarea id="settingPromptDeliberation"></textarea><textarea id="settingPromptVerdict"></textarea></div>
+          </div></details>
           <button class="primary" type="submit"><i data-lucide="save"></i> Save settings</button><button id="testConnectionsBtn" class="button" type="button"><i data-lucide="activity"></i> Test connections</button><div id="connectionHealth" aria-live="polite"></div>
         </form>
         <hr />

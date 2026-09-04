@@ -80,6 +80,41 @@ test("headless thinking endpoint /brain/think completes synchronously", async ()
   assert.ok(response.body.verdict.summary);
 });
 
+test("prompt registry retrieves, edits, versions, and restores every model prompt", async () => {
+  const app = await createApp({ db: openDatabase(":memory:"), env: mockEnv });
+  const list = await request(app).get("/api/v1/prompts").expect(200);
+  assert.ok(list.body.prompts.length >= 20);
+  const target = list.body.prompts.find((prompt) => prompt.id === "role.risk_officer");
+  assert.ok(target);
+  const changed = await request(app).put(`/api/v1/prompts/${target.id}`).send({ promptText: `${target.promptText}\nCustom test rule.` }).expect(200);
+  assert.equal(changed.body.version, target.version + 1);
+  assert.equal(changed.body.customized, true);
+  const restored = await request(app).post(`/api/v1/prompts/${target.id}/reset`).expect(200);
+  assert.equal(restored.body.customized, false);
+  assert.equal(restored.body.promptText, restored.body.defaultText);
+});
+
+test("automatic depth stays proportionate and completed decisions persist executor-ready plans", async () => {
+  const app = await createApp({ db: openDatabase(":memory:"), env: mockEnv });
+  const quick = await app.locals.orchestrator.createSession({ topic: "Just give me your view: tea or coffee?", autoStart: false });
+  assert.equal(quick.mode, "fast");
+  assert.equal(quick.max_rounds, 1);
+  assert.ok(quick.roles.length <= 3);
+
+  const deep = await app.locals.orchestrator.createSession({ topic: "Launch a regulated healthcare application in India and the UK with a £1,500 validation budget.", autoStart: false });
+  assert.equal(deep.mode, "deep");
+  assert.equal(deep.max_rounds, 3);
+  assert.ok(deep.roles.some((role) => role.role_type === "COMPLIANCE_REVIEWER"));
+  await app.locals.orchestrator.runSession(deep.id);
+  const record = await request(app).get(`/api/v1/sessions/${deep.id}/execution-plan`).expect(200);
+  assert.ok(record.body.plan.phases.length >= 2);
+  assert.ok(record.body.plan.phases.every((phase) => phase.tasks.length && phase.acceptanceCriteria.length));
+  assert.equal(record.body.executorHandoff.execution_authorized, false);
+  assert.ok(Array.isArray(record.body.executorHandoff.human_approvals));
+  assert.ok(record.body.readiness.overall > 0);
+  await request(app).get(`/api/v1/sessions/${deep.id}/execution-plan.md`).expect(200).expect("Content-Type", /markdown/);
+});
+
 test("sessions snapshot companion context and let users disable Obsidian memory retrieval", async () => {
   const app = await createApp({ db: openDatabase(":memory:"), env: mockEnv });
   const session = await app.locals.orchestrator.createSession({

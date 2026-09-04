@@ -19,6 +19,8 @@ This build also supports **AnythingLLM Workspace Chain** mode: a static council 
 
 Guides: [Quick Start](docs/QUICK_START.md) · [User Manual](docs/USER_MANUAL.md) · [Technical and Deployment Manual](docs/TECHNICAL_DEPLOYMENT_MANUAL.md) · [Marketing Brochure](docs/MARKETING_BROCHURE.md) · [Architecture Blueprints](docs/blueprints/README.md)
 
+Current product architecture: [Product Simplification and Execution Planning](docs/PRODUCT_SIMPLIFICATION_ARCHITECTURE.md)
+
 ### Windows
 
 Double-click:
