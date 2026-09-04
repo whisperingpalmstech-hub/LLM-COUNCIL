@@ -2,326 +2,219 @@
 <html lang="en">
 <head>
   <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Synod Dashboard</title>
-  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='16' fill='%232563eb'/%3E%3Ctext x='32' y='41' text-anchor='middle' font-size='30' font-family='Arial' font-weight='700' fill='%23ffffff'%3ES%3C/text%3E%3C/svg%3E" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <meta name="theme-color" content="#07110f" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <meta name="apple-mobile-web-app-title" content="Synod" />
+  <title>Synod | Decision Intelligence</title>
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='18' fill='%230b1714'/%3E%3Cpath d='M15 36c7-16 27-16 34 0M19 44c6-11 20-11 26 0' fill='none' stroke='%23b9ffce' stroke-width='5' stroke-linecap='round'/%3E%3Ccircle cx='32' cy='22' r='5' fill='%23e6b7ff'/%3E%3C/svg%3E" />
+  <link rel="manifest" href="/manifest.webmanifest" />
+  <link rel="apple-touch-icon" href="/icons/synod.svg" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Instrument+Sans:wdth,wght@75..100,400..700&family=Instrument+Serif:ital@0;1&display=swap" rel="stylesheet" />
   <link rel="stylesheet" href="/style.css" />
-  <!-- Lucide Icons -->
   <script src="https://unpkg.com/lucide@latest"></script>
 </head>
 <body>
-  <div class="aurora"></div>
+  <script type="application/x-impeccable-direction">
+THESIS: Synod is a living decision field: one dimensional surface where a question, a trusted companion, and evidence rise into focus together.
+OWN-WORLD: Folded Signal Field—an obsidian canvas lattice, translucent indigo glass, mint guidance, violet synthesis, and warm-gold commitment planes.
+STORY: Ask naturally, then watch the decision gain structure without making the council machinery the task.
+FIRST VIEWPORT: A deep companion stage occupies the left third; the right is a continuous glass conversation plane, raised above a responsive 3D fold field with one decisive composer docked below.
+FORM: Canvas-powered isometric tessellation, precision-cut glass surfaces, softly elevated controls, and a human presenter as the spatial anchor; seed key efe9ba93.
+FINISH: unreviewed and undocumented is unfinished; this build ends with the finish review, the verdict, and DESIGN.md
+  </script>
+  <canvas id="foldField" aria-hidden="true"></canvas>
+  <div class="aurora" aria-hidden="true"></div>
   <main class="shell">
     <header class="topbar glass">
-      <div class="brand">
-        <div class="logo">S</div>
-        <div>
-          <h1 data-i18n="brand_title">Synod Council</h1>
-          <p data-i18n="brand_subtitle">Compact multi-LLM deliberation for decisions that deserve scrutiny.</p>
-        </div>
-      </div>
-      <nav style="display: flex; align-items: center; gap: 8px;">
-        <select id="langToggle" style="margin-right: 16px; padding: 6px 10px; border-radius: 8px; border: 1px solid var(--border); background: rgba(255,255,255,0.5);">
-          <option value="en">English</option>
-          <option value="mr">मराठी (Marathi)</option>
-          <option value="hi">हिंदी (Hindi)</option>
-          <option value="ru">Русский (Russian)</option>
-          <option value="nl">Nederlands (Dutch)</option>
-          <option value="ar">العربية (Arabic)</option>
-          <option value="es">Español (Spanish)</option>
-          <option value="de">Deutsch (German)</option>
-        </select>
-        <button id="openWizardBtn" style="margin-right: 16px; padding: 6px 12px; font-weight: 500; border-radius: 8px; border: 1px solid var(--accent); background: transparent; color: var(--accent); cursor: pointer; display: inline-flex; align-items: center; gap: 6px;"><i data-lucide="sparkles" style="width: 16px; height: 16px;"></i> Setup Wizard</button>
-        <button id="simpleModeToggle" style="margin-right: 16px; padding: 6px 12px; font-weight: 500; border-radius: 8px; border: 1px solid var(--primary); background: transparent; color: var(--primary); cursor: pointer; display: inline-flex; align-items: center; gap: 6px;"><i data-lucide="toggle-left"></i> Simple Mode</button>
-        <button class="tab active" data-tab="dashboard" data-i18n="tab_dashboard"><i data-lucide="layout-dashboard" style="width: 18px; height: 18px;"></i> Dashboard</button>
-        <button class="tab" data-tab="history" data-i18n="tab_history"><i data-lucide="history" style="width: 18px; height: 18px;"></i> History</button>
-        <button class="tab" data-tab="councils" data-i18n="tab_councils"><i data-lucide="users" style="width: 18px; height: 18px;"></i> Councils</button>
-        <button class="tab" data-tab="settings" data-i18n="tab_settings"><i data-lucide="settings" style="width: 18px; height: 18px;"></i> Settings</button>
+      <a class="brand" href="/" aria-label="About Synod Council">
+        <span class="logo" aria-hidden="true"><i data-lucide="orbit"></i></span>
+        <span class="brand-copy">
+          <strong data-i18n="brand_title">Synod</strong>
+          <small data-i18n="brand_subtitle">Decision intelligence</small>
+        </span>
+      </a>
+      <nav class="topnav" aria-label="Primary navigation">
+        <button class="tab active" data-tab="dashboard" data-i18n="tab_chat"><i data-lucide="message-circle"></i><span>Chat</span></button>
+        <button class="tab" data-tab="history" data-i18n="tab_sessions"><i data-lucide="history"></i><span>Sessions</span></button>
+        <button class="tab" data-tab="councils" data-i18n="tab_knowledge"><i data-lucide="book-open"></i><span>Knowledge</span></button>
+        <button class="tab" data-tab="settings" data-i18n="tab_settings"><i data-lucide="settings-2"></i><span>Settings</span></button>
       </nav>
+      <div class="top-actions">
+        <button id="newConversationBtn" class="button new-conversation-button" type="button" aria-label="New conversation" data-i18n-aria-label="new_conversation"><i data-lucide="square-pen"></i><span data-i18n="new_conversation">New conversation</span></button>
+        <select id="langToggle" aria-label="Language">
+          <option value="en">EN</option><option value="mr">मराठी</option><option value="hi">हिंदी</option><option value="ru">Русский</option><option value="nl">Nederlands</option><option value="ar">العربية</option><option value="es">Español</option><option value="de">Deutsch</option>
+        </select>
+        <button id="openWizardBtn" class="button accent-button"><i data-lucide="sparkles"></i><span>Setup</span></button>
+      </div>
     </header>
 
-      <div class="app-container">
-      
-      <!-- Left Drawer: History -->
-      <aside id="leftDrawer" class="drawer hidden-drawer glass panel">
-        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 24px;">
-           <h2 data-i18n="full_history" style="margin: 0;"><i data-lucide="history" style="width: 20px; height: 20px; vertical-align: middle; margin-right: 6px;"></i> History</h2>
-           <button id="closeLeftDrawerBtn" style="background: transparent; border: none; cursor: pointer; color: var(--muted); padding: 8px;"><i data-lucide="x"></i></button>
+    <div class="app-container">
+      <aside id="leftDrawer" class="drawer drawer-left hidden-drawer glass panel" aria-label="Decision history">
+        <div class="drawer-head"><div><span class="context-label" data-i18n="decision_archive">Decision archive</span><h2 data-i18n="tab_sessions">Sessions</h2></div><button id="closeLeftDrawerBtn" class="icon-button" aria-label="Close sessions"><i data-lucide="x"></i></button></div>
+        <div class="session-tools">
+          <div class="session-filter" role="tablist" aria-label="Session state"><button class="button active" type="button" role="tab" aria-selected="true" data-session-state="active" data-i18n="active">Active</button><button class="button" type="button" role="tab" aria-selected="false" data-session-state="archived" data-i18n="archived">Archived</button></div>
+          <label class="session-search"><span class="sr-only" data-i18n="search_sessions">Search sessions</span><i data-lucide="search"></i><input id="sessionSearch" type="search" data-i18n-placeholder="search_sessions" placeholder="Search sessions" /></label>
         </div>
-        <aside class="glass panel" style="margin-bottom: 16px; padding: 16px;">
-          <h3 data-i18n="sessions" style="margin:0 0 12px 0; font-size: 14px;"><i data-lucide="clock" style="width: 16px; height: 16px; vertical-align: middle; margin-right: 6px;"></i> Recent Active</h3>
-          <div id="sessions" class="stack"></div>
-        </aside>
-        <p class="muted" data-i18n="history_desc" style="font-size: 12px;">Browse all past deliberations.</p>
-        <div id="historyList" class="stack" style="margin-top: 12px;"></div>
+        <p class="muted" data-i18n="sessions_desc">Open, archive, or restore conversations without losing their evidence.</p>
+        <div id="historyList" class="stack" aria-live="polite"></div>
       </aside>
 
-      <!-- Main Stage -->
-      <section class="main-stage">
-        
-        <!-- Massive Cinematic Avatar -->
-        <div id="avatarStage" class="avatar-cinematic-container">
-           <video id="avatarVideo" loop muted playsinline src="https://res.cloudinary.com/dnxsyymiq/video/upload/v1780135364/hailuo-2_3_Create_a_seamless_10-second_looping_video_of_a_professional_businesswoman_speaki-0_jjklzx.mp4"></video>
-           <div id="avatarPlayOverlay">
-             <i data-lucide="play" style="width: 48px; height: 48px;"></i>
-             <span>Click to Begin Interaction</span>
-           </div>
+      <section class="main-stage" aria-label="Synod decision workspace">
+        <aside id="companionRail" class="decision-rail glass" aria-label="Synod companion">
+          <div class="rail-orbit" aria-hidden="true"></div>
+          <button id="sidebarToggle" class="sidebar-toggle icon-button" type="button" aria-controls="companionRail" aria-expanded="true" title="Collapse companion sidebar"><i data-lucide="panel-left-close"></i><span class="sr-only">Collapse companion sidebar</span></button>
+          <div class="rail-scroll">
+            <div id="avatarStage" class="avatar-cinematic-container rail-avatar">
+              <video id="avatarVideo" loop muted playsinline src="https://res.cloudinary.com/dnxsyymiq/video/upload/v1780135364/hailuo-2_3_Create_a_seamless_10-second_looping_video_of_a_professional_businesswoman_speaki-0_jjklzx.mp4"></video>
+              <div class="presenter-shade" aria-hidden="true"></div>
+              <div class="presenter-meta"><span class="live-pulse"></span><span data-i18n="synod_companion">Synod companion</span><small id="outputVoiceStatus" data-i18n="hear_synod_off">Hear Synod off</small></div>
+              <button id="avatarPlayOverlay" type="button" aria-pressed="false"><i data-lucide="volume-2"></i><span data-i18n="hear_synod">Hear Synod</span></button>
+            </div>
+            <details class="advanced-controls companion-settings">
+              <summary><i data-lucide="sliders-horizontal"></i><span>Advanced</span></summary>
+              <div id="welcomer" class="decision-setup">
+                <p id="companionGreeting" class="welcome-copy" aria-live="polite">What kind of chaos or brilliance are we bringing to the workspace today?</p>
+                <div class="advice-mode" role="group" aria-label="Advice depth">
+                  <button class="advice-mode-option active" data-advice-mode="quick" type="button"><strong>Quick answer</strong><span>One focused answer</span></button>
+                  <button class="advice-mode-option" data-advice-mode="detailed" type="button"><strong>Detailed advice</strong><span>Challenge and action plan</span></button>
+                </div>
+              </div>
+              <div class="protocol-controls">
+                <label><span>Depth</span><select id="mainMode"><option value="standard">Standard</option><option value="fast" selected>Fast</option><option value="deep">Deep</option></select></label>
+                <label><span>Rounds</span><select id="mainRounds"><option value="1" selected>1</option><option value="2">2</option><option value="3">3</option><option value="4">4</option><option value="5">5</option></select></label>
+                <label class="control-wide"><span>Council</span><select id="mainCouncilSelect" aria-label="Council"><option value="">Dynamic council</option></select></label>
+                <label><span>Voice</span><select id="mainTone" aria-label="Conversation tone"><option value="trusted" selected>Trusted friend</option><option value="focused">Focused</option><option value="formal">Formal</option></select></label>
+                <label class="switch-row"><input id="mainSuperbrain" type="checkbox" /><span>Let Synod ask follow-up questions</span></label>
+                <label class="switch-row control-wide"><input id="mainMemory" type="checkbox" checked /><span>Use relevant saved decisions</span></label>
+                <label class="control-wide"><span>Working toward</span><input id="mainOutcome" maxlength="600" placeholder="e.g. A clear next step I can act on this week" /></label>
+                <label><span>Budget cap (USD)</span><input id="mainBudget" type="number" min="0.01" max="10000" step="0.01" placeholder="Auto + 50%" inputmode="decimal" /></label>
+                <small class="control-hint control-wide">Cost is conservatively estimated before work starts. Synod pauses and asks before going beyond this cap.</small>
+              </div>
+              <button id="simpleModeToggle" class="button advanced-notes-control" aria-pressed="false" title="Show supporting notes" type="button"><i data-lucide="book-open-text"></i><span>Supporting notes</span></button>
+              <div id="scoutBar" class="scout-bar"><i data-lucide="github"></i><input id="scoutUrlInput" type="url" aria-label="Public GitHub repository URL" placeholder="Paste a public GitHub repository" /><button id="scoutAnalyzeBtn" class="button secondary" type="button" onclick="window.scoutAnalyze()"><i data-lucide="scan-search"></i><span>Scout</span></button><span id="scoutStatus" aria-live="polite"></span></div>
+              <div id="scoutResult" class="scout-result hidden"></div>
+            </details>
+          </div>
+        </aside>
+
+        <div id="missionRoute" class="mission-route glass" aria-label="Decision mission route">
+          <svg class="route-trajectory" viewBox="0 0 1000 100" preserveAspectRatio="none" aria-hidden="true">
+            <defs><linearGradient id="missionGradient" x1="0" x2="1"><stop offset="0" stop-color="#b8ffc9"/><stop offset=".52" stop-color="#ffb5c8"/><stop offset="1" stop-color="#d8b4ff"/></linearGradient></defs>
+            <path class="trajectory-base" pathLength="100" d="M0 78 C145 78 170 20 292 24 S470 62 610 50 S782 22 1000 18" />
+            <path class="trajectory-progress" pathLength="100" d="M0 78 C145 78 170 20 292 24 S470 62 610 50 S782 22 1000 18" />
+          </svg>
+          <div class="route-stop active" data-stage="interview"><span><i data-lucide="message-circle-question"></i></span><strong>Interview</strong><small>Frame</small></div>
+          <div class="route-stop" data-stage="deliberate"><span><i data-lucide="users"></i></span><strong>Deliberate</strong><small>Challenge</small></div>
+          <div class="route-stop" data-stage="decide"><span><i data-lucide="check"></i></span><strong>Decide</strong><small>Synthesize</small></div>
+          <div class="route-stop" data-stage="execute"><span><i data-lucide="send"></i></span><strong>Execute</strong><small>Commit</small></div>
         </div>
-        
-        <!-- Chat Interface -->
-        <div class="chat-interface">
-          
-          <div id="welcomer" class="chat-feed-scroll" style="align-items: center; justify-content: center; text-align: center;">
-             <h2 style="font-size: 32px; font-weight: 700; margin-bottom: 8px; color: var(--accent);">Convene Your AI Council</h2>
-             <p class="muted" style="font-size: 16px; max-width: 500px; margin-bottom: 32px;">Input your idea or question below. Our multi-LLM council will stress-test it and orchestrate an execution plan.</p>
-             
-             <!-- Unified settings inside welcomer -->
-             <div style="display: flex; gap: 12px; flex-wrap: wrap; justify-content: center; margin-bottom: 24px;">
-                <select id="mainMode" style="width: auto; padding: 8px 16px; border-radius: 20px; background: rgba(255,255,255,0.05); cursor: pointer; border: 1px solid var(--border);">
-                  <option value="standard">Standard Mode</option>
-                  <option value="fast">Fast Mode</option>
-                  <option value="deep">Deep Mode</option>
-                </select>
-                <select id="mainRounds" style="width: auto; padding: 8px 16px; border-radius: 20px; background: rgba(255,255,255,0.05); cursor: pointer; border: 1px solid var(--border);">
-                  <option value="1">1 Round</option>
-                  <option value="2">2 Rounds</option>
-                  <option value="3">3 Rounds</option>
-                  <option value="4" selected>4 Rounds</option>
-                  <option value="5">5 Rounds</option>
-                </select>
-                <label style="display: flex; align-items: center; gap: 6px; font-weight: normal; cursor: pointer; padding: 8px 16px; border-radius: 20px; background: rgba(255,255,255,0.05); border: 1px solid var(--border);"><input id="mainSuperbrain" type="checkbox" checked style="width: 14px; height: 14px;" /> Superbrain Pipeline</label>
-             </div>
-          </div>
-          
+
+        <div class="chat-interface glass">
+          <div class="live-plane-head"><div><span class="context-label">Synod</span><h2 data-i18n="conversation">Conversation</h2></div><div class="live-plane-actions"><button id="mainTopicFileBtn" class="button context-upload" type="button" title="Add context or knowledge"><i data-lucide="paperclip"></i><span data-i18n="add_context">Add context</span></button><input type="file" id="mainTopicFileInput" class="hidden" /><button id="phoneUploadToggle" class="icon-button hidden" type="button" title="Upload from your phone" aria-label="Upload from your phone" aria-controls="mobileBridgeCard" aria-expanded="false"><i data-lucide="smartphone"></i></button><button id="councilActivityToggle" class="button council-activity-toggle hidden" type="button" aria-controls="missionRoute liveDeliberation" aria-expanded="false" title="Show council activity"><i data-lucide="workflow"></i><span data-i18n="council_activity">Council activity</span></button><a id="transcript" class="button disabled" data-i18n="report" title="Download report"><i data-lucide="download"></i><span>Report</span></a></div></div>
+          <div id="mobileBridgeCard" class="mobile-bridge phone-upload-popover hidden"><i data-lucide="smartphone"></i><div><h3>Continue on your phone</h3><p>Scan to add photos, audio, or notes to this decision.</p></div><img id="mobileQr" src="data:image/gif;base64,R0lGODlhAQABAAD/ACwAAAAAAQABAAACADs=" alt="QR code for mobile context upload" /><a id="mobileLink" target="_blank" rel="noreferrer">Open upload portal</a></div>
           <div id="chatFeed" class="chat-feed-scroll hidden">
-            <div class="sectionHead" style="flex-shrink: 0; padding: 0 0 16px 0; border-bottom: 1px solid var(--border); margin-bottom: 16px;">
-              <h2 data-i18n="live_council" style="margin:0;"><i data-lucide="activity" style="width: 20px; height: 20px; vertical-align: middle; margin-right: 6px; color: var(--accent);"></i> Live Council</h2>
-              <a id="transcript" class="button disabled" data-i18n="transcript" style="padding: 6px 12px; font-size: 12px;"><i data-lucide="file-text" style="width:14px; height:14px;"></i> Transcript</a>
+            <div id="pipelineStatus" class="pipeline-status hidden"><strong>Pipeline</strong><span id="pipelineStage">Starting…</span></div>
+            <details id="activeContext" class="active-context hidden">
+              <summary><i data-lucide="badge-info"></i><span>Active context</span><small id="activeContextSummary"></small></summary>
+              <dl id="activeContextDetails"></dl>
+            </details>
+            <div id="verdict"></div>
+            <div class="metrics">
+              <div><small>Status</small><strong id="status">Idle</strong></div><div><small>Round</small><strong id="round">-</strong></div><div><small>Consensus</small><strong id="consensus">-</strong></div><div><small>Estimated spend</small><strong id="cost">-</strong></div><div><small>Trace</small><strong id="internal">Compact</strong></div>
             </div>
-            
-            <div id="pipelineStatus" class="hidden" style="margin-bottom: 16px; padding: 12px; background: rgba(37, 99, 235, 0.1); border-left: 4px solid #2563eb; border-radius: 8px; flex-shrink: 0;">
-              <strong>Pipeline:</strong> <span id="pipelineStage">Starting...</span>
-            </div>
-            
-            <div id="verdict" style="flex-shrink: 0;"></div>
-            
-            <div class="metrics" style="flex-shrink: 0; display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin-bottom: 16px;">
-              <div style="padding: 10px; border-radius: 12px; text-align: center; background: rgba(0,0,0,0.02); border: 1px solid var(--border);"><small style="font-size: 10px; color: var(--muted); text-transform: uppercase;">Status</small><br/><strong id="status" style="font-size: 16px;">Idle</strong></div>
-              <div style="padding: 10px; border-radius: 12px; text-align: center; background: rgba(0,0,0,0.02); border: 1px solid var(--border);"><small style="font-size: 10px; color: var(--muted); text-transform: uppercase;">Round</small><br/><strong id="round" style="font-size: 16px;">-</strong></div>
-              <div style="padding: 10px; border-radius: 12px; text-align: center; background: rgba(0,0,0,0.02); border: 1px solid var(--border);"><small style="font-size: 10px; color: var(--muted); text-transform: uppercase;">Consensus</small><br/><strong id="consensus" style="font-size: 16px;">-</strong></div>
-              <div style="padding: 10px; border-radius: 12px; text-align: center; background: rgba(0,0,0,0.02); border: 1px solid var(--border);"><small style="font-size: 10px; color: var(--muted); text-transform: uppercase;">Internal</small><br/><strong id="internal" style="font-size: 16px;">Compact</strong></div>
-            </div>
-            
-            <div id="loader" class="loader hidden" style="flex-shrink: 0;">
-              <span class="dot"></span><span class="dot"></span><span class="dot"></span> <span>Thinking...</span>
-            </div>
-            
-            <div id="messages" class="messages" style="flex: 1;"></div>
+            <section id="liveDeliberation" class="live-deliberation hidden" aria-live="polite">
+              <div class="deliberation-head"><div class="deliberation-state"><span class="live-pulse"></span><span id="deliberationLabel">Deliberating</span></div><span class="connection-note">Resilient polling active</span></div>
+              <div class="progress-track" role="progressbar" aria-label="Current round progress" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0"><div id="roundProgressFill" class="progress-fill"></div></div>
+              <div id="roundNodes" class="rounds-row" aria-label="Council rounds"></div>
+              <div id="councilRoles" class="council-roles" aria-label="Council members"></div>
+              <div class="progress-track consensus-track"><div id="consensusFill" class="progress-fill"></div></div>
+            </section>
+            <div id="loader" class="loader hidden"><span class="dot"></span><span class="dot"></span><span class="dot"></span><span>Thinking…</span></div>
+            <section id="researchStream" class="research-stream hidden" aria-label="Supporting notes">
+              <div class="research-stream-head"><div><h3>Supporting notes</h3><p>Evidence and dissent behind the recommendation.</p></div><span id="researcherCount">0 responses</span></div>
+              <div id="messages" class="messages"></div>
+            </section>
           </div>
-          
-          <!-- Huge Composer Input -->
-          <div class="huge-composer">
-             <button id="mainTopicFileBtn" type="button" style="background: rgba(255,255,255,0.05); border: 1px solid var(--border); border-radius: 50%; width: 48px; height: 48px; color: var(--text); cursor: pointer; display: flex; align-items: center; justify-content: center; transition: all 0.2s;"><i data-lucide="paperclip" style="width: 20px; height: 20px;"></i></button>
-             <input type="file" id="mainTopicFileInput" style="display: none;" />
-             <div id="scoutBar" style="display: flex; gap: 8px; margin-bottom: 8px; align-items: center;">
-                <i data-lucide="link" style="width: 16px; height: 16px; opacity: 0.5;"></i>
-                <input id="scoutUrlInput" type="url" placeholder="Paste GitHub repo URL to analyze before convening…" style="flex:1; padding:8px 12px; border:1px solid var(--border); border-radius:8px; background:rgba(255,255,255,0.05); color:var(--text); font-size:13px;" />
-                <button id="scoutAnalyzeBtn" type="button" onclick="window.scoutAnalyze()" style="padding:8px 14px; border-radius:8px; border:1px solid var(--accent); background:transparent; color:var(--accent); cursor:pointer; font-size:12px; white-space:nowrap;">Scout</button>
-                <span id="scoutStatus" style="font-size:11px; color:var(--muted); white-space:nowrap;"></span>
-             </div>
-             <textarea id="mainTopicInput" placeholder="What decision requires maximum scrutiny?"></textarea>
-             <button id="mainTopicMicBtn" type="button" class="huge-mic-btn" style="background: rgba(255,255,255,0.05); width: 48px; height: 48px; flex-shrink: 0;" title="Voice Input">
-                <i data-lucide="mic"></i>
-             </button>
-             <!-- In welcomer state this acts as 'Convene', in chat state it acts as 'Reply' -->
-             <button id="mainConveneBtn" class="huge-mic-btn" title="Convene / Send">
-                <i data-lucide="send"></i>
-             </button>
+          <div id="emptyCouncil" class="empty-council"><span class="empty-glyph"><i data-lucide="route"></i></span><div><strong>Council standing by</strong><p>Your evidence trail, dissent, and decision brief will assemble here.</p></div></div>
+          <section id="completionActions" class="completion-actions hidden" aria-labelledby="completionTitle">
+            <div><strong id="completionTitle" data-i18n="decision_complete">Decision complete</strong><p data-i18n="choose_next_step">Choose whether your next message should use this decision as context.</p></div>
+            <div><button id="continueConversationBtn" class="button" type="button" data-i18n="continue_conversation">Continue conversation</button><button id="startFreshBtn" class="primary" type="button" data-i18n="start_fresh">Start fresh</button><button id="archiveConversationBtn" class="button" type="button" data-i18n="archive">Archive</button></div>
+          </section>
+          <div class="conversation-composer">
+            <div class="composer-main">
+              <textarea id="mainTopicInput" aria-label="Message Synod" aria-describedby="mainDictationStatus" data-i18n-placeholder="message_placeholder" placeholder="Ask Synod anything, or describe a decision…"></textarea>
+              <div id="mainDictationStatus" class="dictation-status" role="status" aria-live="polite" data-i18n="voice_checking">Checking voice readiness…</div>
+              <div id="voiceDiagnostics" class="voice-diagnostics hidden"></div>
+              <div class="composer-actions">
+                <label class="voice-language"><span data-i18n="spoken_language">Spoken language</span><select id="voiceInputLanguage" aria-label="Spoken language"><option value="auto" data-i18n="auto_detect">Auto detect</option><option value="en">English</option><option value="mr">मराठी</option><option value="hi">हिन्दी</option><option value="ru">Русский</option><option value="nl">Nederlands</option><option value="ar">العربية</option><option value="es">Español</option><option value="de">Deutsch</option></select></label>
+                <button id="mainTopicMicBtn" type="button" class="button talk-button" aria-label="Talk to Synod" aria-pressed="false"><i data-lucide="mic"></i><span data-i18n="talk">Talk</span></button>
+                <button id="cancelRecordingBtn" type="button" class="button hidden" data-i18n="cancel">Cancel</button>
+                <button id="retryVoiceBtn" type="button" class="button hidden"><i data-lucide="rotate-cw"></i><span data-i18n="retry">Retry</span></button>
+                <button id="voiceDiagnosticsBtn" type="button" class="button quiet-button"><i data-lucide="stethoscope"></i><span data-i18n="diagnostics">Diagnostics</span></button>
+                <button id="mainConveneBtn" class="primary convene-button" title="Ask Synod" type="button"><span data-i18n="ask_synod">Ask Synod</span><i data-lucide="arrow-up-right"></i></button>
+              </div>
+            </div>
           </div>
-          
         </div>
       </section>
 
-      <!-- Right Drawer: Settings -->
-      <aside id="rightDrawer" class="drawer hidden-drawer glass panel">
-         <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 24px;">
-           <h2 style="margin: 0;"><i data-lucide="settings" style="width: 20px; height: 20px; vertical-align: middle; margin-right: 6px;"></i> Settings</h2>
-           <button id="closeRightDrawerBtn" style="background: transparent; border: none; cursor: pointer; color: var(--muted); padding: 8px;"><i data-lucide="x"></i></button>
-         </div>
-         
-         <div id="mobileBridgeCard" class="glass panel" style="padding: 16px; text-align: center; display: flex; flex-direction: column; gap: 8px; margin-bottom: 24px;">
-            <h2 style="margin: 0; font-size: 16px;"><i data-lucide="smartphone" style="vertical-align: middle; margin-right: 6px; width: 18px; height: 18px; color: var(--accent);"></i> Mobile Upload</h2>
-            <p class="muted" style="font-size: 11px; margin: 0;">Scan to beam photos, audio, or notes from your phone.</p>
-            <img id="mobileQr" style="width: 130px; height: 130px; margin: 4px auto; background: white; padding: 6px; border-radius: 8px; display: block;" />
-            <a id="mobileLink" target="_blank" style="font-size: 11px; color: var(--accent); font-weight: 500; text-decoration: none;">Open Portal</a>
-         </div>
-         
-         <form id="settingsForm" class="stack" autocomplete="off">
-            <h3 style="margin: 16px 0 8px 0; color: var(--primary); font-size: 14px;">AnythingLLM Preferences</h3>
-            <label style="font-size: 12px; display: flex; flex-direction: column; gap: 4px;"><span>Base URL</span><input id="settingUrl" name="anythingllm_base_url" value="http://localhost:3001/api/v1" style="padding: 8px;"/></label>
-            <label style="font-size: 12px; display: flex; flex-direction: column; gap: 4px;"><span>API Key</span><input id="settingKey" name="anythingllm_api_key" placeholder="Optional" style="padding: 8px;"/></label>
-            
-            <h3 style="margin: 16px 0 8px 0; color: var(--primary); font-size: 14px;">SiliconFlow Preferences</h3>
-            <label style="font-size: 12px; display: flex; flex-direction: column; gap: 4px;"><span>API Key</span><input id="settingSiliconKey" name="siliconflow_api_key" placeholder="Optional" style="padding: 8px;"/></label>
-            <label style="font-size: 12px; display: flex; flex-direction: column; gap: 4px;"><span>Model Name</span><input id="settingSiliconModel" name="siliconflow_model" value="Qwen/Qwen2.5-72B-Instruct" style="padding: 8px;"/></label>
-
-            <h3 style="margin: 16px 0 8px 0; color: var(--accent); font-size: 14px;">Database Preferences</h3>
-            <label style="font-size: 12px; display: flex; flex-direction: column; gap: 4px;"><span>Type</span><select id="settingDbType" name="db_type" style="padding: 8px;"><option value="sqlite">SQLite</option><option value="postgres">PostgreSQL</option></select></label>
-            <label style="font-size: 12px; display: flex; flex-direction: column; gap: 4px;"><span>URL</span><input id="settingDbUrl" name="db_url" placeholder="Optional" style="padding: 8px;"/></label>
-            
-            <h3 style="margin: 16px 0 8px 0; color: var(--accent); font-size: 14px;">Custom Presenter Video</h3>
-            <label style="font-size: 12px; display: flex; flex-direction: column; gap: 4px;"><span>Looping .mp4</span><input id="settingAvatarVideo" type="file" accept="video/mp4" style="padding: 8px;"/></label>
-
-            <h3 style="margin: 16px 0 8px 0; color: var(--accent); font-size: 14px;">Voice Output Preferences</h3>
-            <label style="font-size: 12px; display: flex; align-items: center; gap: 8px;"><input id="settingEnableVoice" name="enable_voice" type="checkbox" style="width: 14px; height: 14px;" /> Enable Voice Output</label>
-            <label style="font-size: 12px; display: flex; flex-direction: column; gap: 4px; margin-top: 8px;"><span>TTS Engine</span><select id="settingTtsEngine" name="tts_engine" style="padding: 8px;"><option value="browser">Browser Native</option><option value="elevenlabs">ElevenLabs</option></select></label>
-            <label style="font-size: 12px; display: flex; flex-direction: column; gap: 4px; margin-top: 8px;"><span>ElevenLabs API Key</span><input id="settingElevenKey" name="elevenlabs_api_key" type="password" placeholder="Optional" style="padding: 8px;"/></label>
-            <label style="font-size: 12px; display: flex; flex-direction: column; gap: 4px; margin-top: 8px;"><span>ElevenLabs Voice ID</span><input id="settingElevenVoice" name="elevenlabs_voice_id" placeholder="e.g. 21m00Tcm4TlvDq8ikWAM" style="padding: 8px;"/></label>
-
-            <h3 style="margin: 16px 0 8px 0; color: var(--accent); font-size: 14px;">Engine Tuning</h3>
-            <label style="font-size: 12px; display: flex; flex-direction: column; gap: 4px;"><span>Kelly Circuit Breaker %</span><input id="settingKelly" type="number" value="5" style="padding: 8px;"/></label>
-            <label style="font-size: 12px; display: flex; flex-direction: column; gap: 4px;"><span>Entropy Threshold</span><input id="settingEntropy" type="number" value="30" style="padding: 8px;"/></label>
-
-            <h3 style="margin: 16px 0 8px 0; color: var(--accent); font-size: 14px;">Custom Prompt Templates</h3>
-            <label style="font-size: 12px; display: flex; flex-direction: column; gap: 4px;"><span>Interview Prompt</span><textarea id="settingPromptInterviewer" style="padding: 8px; min-height: 80px; font-size: 11px; font-family: monospace;"></textarea></label>
-            <label style="font-size: 12px; display: flex; flex-direction: column; gap: 4px;"><span>Deliberation Prompt</span><textarea id="settingPromptDeliberation" style="padding: 8px; min-height: 80px; font-size: 11px; font-family: monospace;"></textarea></label>
-            <label style="font-size: 12px; display: flex; flex-direction: column; gap: 4px;"><span>Verdict Prompt</span><textarea id="settingPromptVerdict" style="padding: 8px; min-height: 80px; font-size: 11px; font-family: monospace;"></textarea></label>
-
-            <button class="primary" type="submit" style="margin-top: 16px; width: 100%; justify-content: center;"><i data-lucide="save"></i> Save Settings</button>
-         </form>
-         
-         <hr style="border-color: var(--border); margin: 24px 0;" />
-         <h2 style="font-size: 16px;"><i data-lucide="users" style="width: 16px; height: 16px; vertical-align: middle; margin-right: 6px;"></i> Static Councils</h2>
-         <div id="councilList" class="stack" style="margin-bottom: 16px;"></div>
-         <button id="importCouncil" class="button" style="width: 100%; justify-content: center;"><i data-lucide="download"></i> Import Current</button>
-         
-         <!-- Hidden elements to preserve JS bindings that we removed from direct view to save space in the new UI -->
-         <div class="hidden">
-           <form id="sessionForm">
-             <textarea id="topic"></textarea><select id="mode"></select><select id="rounds"></select><select id="councilSelect"></select>
-             <input id="compact" type="checkbox" /><input id="web" type="checkbox" /><input id="rag" type="checkbox" /><input id="superbrain" type="checkbox" />
-           </form>
-           <form id="councilForm"><input id="councilName" /><input id="councilDescription" /><input id="vetoRoles" /><textarea id="modelOverrides"></textarea><textarea id="manifest"></textarea><button data-i18n="save"></button></form>
-           <input id="mainChatInput" /><button id="mainSendBtn"></button>
-         </div>
-         </div>
+      <aside id="rightDrawer" class="drawer drawer-right hidden-drawer glass panel" aria-label="Settings and councils">
+        <div class="drawer-head"><div><span class="context-label">System control</span><h2>Settings</h2></div><button id="closeRightDrawerBtn" class="icon-button" aria-label="Close settings"><i data-lucide="x"></i></button></div>
+        <form id="settingsForm" class="stack settings-form" autocomplete="off">
+          <div class="provider-note"><i data-lucide="shield-check"></i><div><strong>Credentials stay masked</strong><p>Long API keys are expected. Leave a configured field blank to keep the stored key.</p></div></div>
+          <h3>AnythingLLM</h3><label><span>Base URL</span><input id="settingUrl" name="anythingllm_base_url" value="http://localhost:3001/api/v1" /></label><label class="secret-control"><span>API key</span><input id="settingKey" name="anythingllm_api_key" type="password" placeholder="Optional" autocomplete="new-password" spellcheck="false" maxlength="512" /><small class="secret-state">Checking configuration…</small></label>
+          <h3>SiliconFlow</h3><label class="secret-control"><span>API key</span><input id="settingSiliconKey" name="siliconflow_api_key" type="password" placeholder="Optional" autocomplete="new-password" spellcheck="false" maxlength="512" /><small class="secret-state">Checking configuration…</small></label><label><span>Model</span><input id="settingSiliconModel" name="siliconflow_model" value="Qwen/Qwen2.5-72B-Instruct" /></label>
+          <h3>Database</h3><label><span>Type</span><select id="settingDbType" name="db_type"><option value="sqlite">SQLite</option><option value="postgres">PostgreSQL</option></select></label><label><span>URL</span><input id="settingDbUrl" name="db_url" placeholder="Optional" /></label>
+          <h3>Presenter</h3><label><span>Looping MP4</span><input id="settingAvatarVideo" type="file" accept="video/mp4" /></label>
+          <h3>Voice output</h3><label class="switch-row"><input id="settingEnableVoice" name="enable_voice" type="checkbox" /><span>Enable voice output</span></label><label><span>TTS engine</span><select id="settingTtsEngine" name="tts_engine"><option value="browser">Browser native</option><option value="elevenlabs">ElevenLabs</option></select></label><label class="secret-control"><span>ElevenLabs key</span><input id="settingElevenKey" name="elevenlabs_api_key" type="password" placeholder="Optional" autocomplete="new-password" spellcheck="false" maxlength="512" /><small class="secret-state">Checking configuration…</small></label><label><span>Voice ID</span><input id="settingElevenVoice" name="elevenlabs_voice_id" placeholder="Voice ID" /></label>
+          <h3>Engine tuning</h3><label><span>Kelly circuit breaker %</span><input id="settingKelly" type="number" value="5" /></label><label><span>Entropy threshold</span><input id="settingEntropy" type="number" value="30" /></label><label><span>Default conversation budget (USD)</span><input id="settingDefaultBudget" type="number" min="0.01" max="10000" step="0.01" value="1" inputmode="decimal" /><small>New requests reserve a conservative estimate plus a 50% safety margin, up to this default minimum.</small></label>
+          <h3>Companion context</h3><label><span>Persona brief</span><textarea id="settingCompanionBrief" maxlength="1200" placeholder="How should Synod challenge, support, and communicate with you?"></textarea><small>Applied to new decisions and shown in the active-context disclosure.</small></label><label><span>Default outcome</span><input id="settingCompanionOutcome" maxlength="600" placeholder="What should Synod optimize for by default?" /></label><label class="switch-row"><input id="settingShowContext" type="checkbox" checked /><span>Show active context in the decision workspace</span></label>
+          <h3>Prompt templates</h3><label><span>Interview</span><textarea id="settingPromptInterviewer"></textarea></label><label><span>Deliberation</span><textarea id="settingPromptDeliberation"></textarea></label><label><span>Verdict</span><textarea id="settingPromptVerdict"></textarea></label>
+          <button class="primary" type="submit"><i data-lucide="save"></i> Save settings</button><button id="testConnectionsBtn" class="button" type="button"><i data-lucide="activity"></i> Test connections</button><div id="connectionHealth" aria-live="polite"></div>
+        </form>
+        <hr />
+        <h2 class="subhead"><i data-lucide="users"></i> Static councils</h2><div id="councilList" class="stack"></div><button id="importCouncil" class="button full-button"><i data-lucide="download"></i> Import current</button>
       </aside>
+    </div>
+  </main>
 
-    </div>
-  <div id="interviewModal" class="hidden glass panel" style="position: fixed; top: 10%; left: 50%; transform: translateX(-50%); width: 90%; max-width: 600px; z-index: 1000; box-shadow: 0 10px 30px rgba(0,0,0,0.5);">
-    <h2><i data-lucide="mic" style="vertical-align: middle; margin-right: 8px;"></i> Pre-Session Interview</h2>
-    <div id="interviewChat" style="margin: 16px 0; max-height: 40vh; overflow-y: auto; background: rgba(0,0,0,0.1); padding: 12px; border-radius: 8px; display: flex; flex-direction: column; gap: 8px;">
-      <div style="padding: 8px; border-radius: 4px; background: rgba(255,255,255,0.05);"><strong>Synthesist:</strong> Preparing questions...</div>
-    </div>
-    <form id="interviewForm" style="display: flex; gap: 8px;">
-      <input type="text" id="interviewInput" style="flex: 1;" placeholder="Your response..." required autocomplete="off" />
-      <button class="primary" type="submit">Send</button>
-    </form>
+  <div class="compatibility-bindings hidden" aria-hidden="true">
+    <form id="sessionForm"><textarea id="topic"></textarea><select id="mode"></select><select id="rounds"></select><select id="councilSelect"></select><input id="compact" type="checkbox" /><input id="web" type="checkbox" /><input id="rag" type="checkbox" /><input id="superbrain" type="checkbox" /></form>
+    <form id="councilForm"><input id="councilName" /><input id="councilDescription" /><input id="vetoRoles" /><textarea id="modelOverrides"></textarea><textarea id="manifest"></textarea><pre id="workspacePreview"></pre><button data-i18n="save"></button></form>
+    <input id="mainChatInput" /><button id="mainSendBtn"></button><input id="mainCompact" type="checkbox" checked /><input id="mainWeb" type="checkbox" checked /><input id="mainRag" type="checkbox" checked />
+    <div id="avatarAnchorWelcomer"></div><div id="avatarAnchorFeed"></div>
   </div>
-  
+
+  <div id="interviewModal" class="modal interview-modal hidden glass panel" role="dialog" aria-modal="true" aria-labelledby="interviewTitle">
+    <div class="modal-head"><div><span class="context-label">Pre-session calibration</span><h2 id="interviewTitle">The first useful question</h2></div><span class="live-pulse"></span></div>
+    <div id="interviewChat" class="interview-chat"><div class="interview-turn council"><strong>Lead synthesist</strong><p>Preparing the highest-value clarification…</p></div></div>
+    <form id="interviewForm" class="interview-form"><input type="text" id="interviewInput" placeholder="Your response…" required autocomplete="off" /><button class="primary" type="submit">Send <i data-lucide="arrow-up"></i></button></form>
+  </div>
   <div id="avatarBackdrop"></div>
-  
-  <div id="avatarContainer" class="state-welcome">
-    <video id="avatarVideo" loop muted playsinline src="https://res.cloudinary.com/dnxsyymiq/video/upload/v1780135364/hailuo-2_3_Create_a_seamless_10-second_looping_video_of_a_professional_businesswoman_speaki-0_jjklzx.mp4"></video>
-    <div id="avatarPlayOverlay">
-      <i data-lucide="play" style="width: 48px; height: 48px;"></i>
-      <span>Click to Begin</span>
+
+  <dialog id="freshConversationDialog" class="confirmation-dialog glass" aria-labelledby="freshDialogTitle">
+    <form method="dialog"><h2 id="freshDialogTitle" data-i18n="start_new_conversation">Start a new conversation?</h2><p data-i18n="fresh_dialog_body">This clears the current context link. Your saved session will remain available in Sessions.</p><div class="dialog-actions"><button value="cancel" class="button" data-i18n="cancel">Cancel</button><button id="confirmFreshBtn" value="confirm" class="primary" data-i18n="start_fresh">Start fresh</button></div></form>
+  </dialog>
+
+  <div id="setupWizardModal" class="modal setup-modal hidden glass panel" role="dialog" aria-modal="true" aria-labelledby="wizardTitle">
+    <div class="modal-head"><div><span class="context-label">Configuration protocol</span><h2 id="wizardTitle">Council setup</h2></div><button id="closeWizardBtn" class="icon-button" aria-label="Close setup"><i data-lucide="x"></i></button></div>
+    <div class="wizard-progress"><span class="wizard-step-indicator active-step" id="indStep1">Backend</span><span class="wizard-step-indicator" id="indStep2">Keys</span><span class="wizard-step-indicator" id="indStep3">Memory</span><span class="wizard-step-indicator" id="indStep4">Roles</span><span class="wizard-step-indicator" id="indStep5">Finish</span></div>
+    <div id="wizardStepContent" class="wizard-content">
+      <div id="wizStep1" class="wizard-step-panel stack"><h3>Choose your model backend</h3><p class="muted">Use managed cloud models for speed or your local AnythingLLM stack for privacy.</p><div class="choice-grid"><button id="wizCloudBtn" class="choice-card selected" type="button"><i data-lucide="cloud"></i><strong>Cloud mode</strong><small>Recommended for fast multi-model councils</small></button><button id="wizLocalBtn" class="choice-card" type="button"><i data-lucide="hard-drive"></i><strong>Local mode</strong><small>Offline, private, and self-hosted</small></button></div></div>
+      <div id="wizStep2" class="wizard-step-panel hidden stack"><h3>Add model credentials</h3><p class="muted">Long provider keys are normal. They remain masked and are never shown in council output.</p><label><span>SiliconFlow API key</span><input id="wizSiliconKey" type="password" placeholder="Paste key securely" autocomplete="new-password" spellcheck="false" maxlength="512" /></label><label><span>Anthropic API key</span><input id="wizAnthropicKey" type="password" placeholder="Configured keys remain hidden" autocomplete="new-password" spellcheck="false" maxlength="512" /></label></div>
+      <div id="wizStep3" class="wizard-step-panel hidden stack"><h3>Connect council memory</h3><p class="muted">AnythingLLM manages workspace retrieval and vector indexing.</p><label><span>AnythingLLM URL</span><input id="wizSettingUrl" value="http://localhost:3001/api/v1" /></label><label><span>API key</span><input id="wizSettingKey" type="password" placeholder="Optional" /></label></div>
+      <div id="wizStep4" class="wizard-step-panel hidden stack"><h3>Set fallback council roles</h3><p class="muted">Dynamic councils are generated automatically. These roles remain available as a stable fallback.</p><div class="role-choice-grid"><label><input id="wizRoleSyn" type="checkbox" checked /><i data-lucide="pen-tool"></i> Lead synthesist</label><label><input id="wizRoleExp" type="checkbox" checked /><i data-lucide="microscope"></i> Domain expert</label><label><input id="wizRoleMkt" type="checkbox" checked /><i data-lucide="chart-no-axes-combined"></i> Growth strategist</label><label><input id="wizRolePol" type="checkbox" checked /><i data-lucide="scale"></i> Policy reviewer</label><label><input id="wizRoleRsk" type="checkbox" checked /><i data-lucide="shield-alert"></i> Risk officer</label></div></div>
+      <div id="wizStep5" class="wizard-step-panel hidden finish-step"><span class="empty-glyph"><i data-lucide="circle-check-big"></i></span><h3>System ready</h3><p class="muted">Your council can now interrogate a decision and return an execution-ready brief.</p></div>
     </div>
+    <div class="wizard-actions"><button id="wizPrevBtn" class="button" type="button"><i data-lucide="arrow-left"></i> Back</button><span></span><button id="wizNextBtn" class="primary" type="button">Next <i data-lucide="arrow-right"></i></button><button id="wizSaveBtn" class="primary hidden" type="button"><i data-lucide="save"></i> Complete setup</button></div>
   </div>
 
-  <!-- Setup Wizard Modal -->
-  <div id="setupWizardModal" class="hidden glass panel" style="position: fixed; top: 10%; left: 50%; transform: translate(-50%, 0); width: 90%; max-width: 650px; z-index: 2000; box-shadow: var(--shadow-lg); padding: 32px; background: rgba(255,255,255,0.96); display: flex; flex-direction: column; gap: 20px;">
-    <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid var(--border); padding-bottom: 12px;">
-      <h2 style="margin: 0; font-size: 24px; color: var(--accent); display: flex; align-items: center; gap: 8px;"><i data-lucide="sparkles"></i> Council Setup Wizard</h2>
-      <button id="closeWizardBtn" style="background: transparent; border: none; cursor: pointer; color: var(--muted);"><i data-lucide="x"></i></button>
-    </div>
-    
-    <!-- Wizard Steps Progress Bar -->
-    <div style="display: flex; justify-content: space-between; font-size: 12px; color: var(--muted); margin-bottom: 8px;">
-      <span class="wizard-step-indicator active-step" id="indStep1" style="font-weight:bold;color:var(--accent);">1. Backend</span>
-      <span class="wizard-step-indicator" id="indStep2">2. API Keys</span>
-      <span class="wizard-step-indicator" id="indStep3">3. AnythingLLM</span>
-      <span class="wizard-step-indicator" id="indStep4">4. Council Roles</span>
-      <span class="wizard-step-indicator" id="indStep5">5. Finish</span>
-    </div>
-    
-    <!-- Wizard Step Content Boxes -->
-    <div id="wizardStepContent" style="min-height: 250px;">
-      <!-- Step 1: Providers selection -->
-      <div id="wizStep1" class="wizard-step-panel stack" style="gap: 16px;">
-        <h3 style="margin: 0;">Step 1: Choose your model backend</h3>
-        <p class="muted" style="margin: 0;">Select whether you want to run Synod using fast cloud providers (recommended) or offline on your local computer.</p>
-        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-top: 12px;">
-          <div id="wizCloudBtn" class="glass panel" style="padding: 20px; text-align: center; cursor: pointer; border: 2px solid var(--accent); background: rgba(0, 122, 255, 0.05);">
-            <div style="font-size: 28px; margin-bottom: 8px;">☁️</div>
-            <strong style="display: block; margin-bottom: 4px;">Cloud Mode (Recommended)</strong>
-            <span class="muted" style="font-size: 11px;">Uses SiliconFlow (Qwen/DeepSeek), Claude, or GPT for extreme speed.</span>
-          </div>
-          <div id="wizLocalBtn" class="glass panel" style="padding: 20px; text-align: center; cursor: pointer; border: 2px solid transparent;">
-            <div style="font-size: 28px; margin-bottom: 8px;">💻</div>
-            <strong style="display: block; margin-bottom: 4px;">Local Mode (Offline)</strong>
-            <span class="muted" style="font-size: 11px;">Uses your local AnythingLLM / Ollama instance. Entirely free and private.</span>
-          </div>
-        </div>
-      </div>
-      
-      <!-- Step 2: Keys -->
-      <div id="wizStep2" class="wizard-step-panel hidden stack" style="gap: 12px;">
-        <h3 style="margin: 0;">Step 2: Enter API Keys</h3>
-        <p class="muted" style="margin: 0;">Paste the keys for your cloud models. Leave blank if using local offline models.</p>
-        <div class="fields" style="display: flex; flex-direction: column; gap: 12px; margin-top: 12px;">
-          <label style="display: flex; flex-direction: column; gap: 4px;"><span style="font-weight: bold; font-size: 13px;">SiliconFlow API Key (Qwen & DeepSeek)</span><input id="wizSiliconKey" type="text" placeholder="sk-..." style="padding: 10px; border-radius: 8px; border: 1px solid var(--border);" /></label>
-          <label style="display: flex; flex-direction: column; gap: 4px;"><span style="font-weight: bold; font-size: 13px;">Anthropic API Key (Claude)</span><input id="wizAnthropicKey" type="text" placeholder="sk-ant-..." style="padding: 10px; border-radius: 8px; border: 1px solid var(--border);" /></label>
-        </div>
-      </div>
-
-      <!-- Step 3: AnythingLLM -->
-      <div id="wizStep3" class="wizard-step-panel hidden stack" style="gap: 12px;">
-        <h3 style="margin: 0;">Step 3: AnythingLLM Connection</h3>
-        <p class="muted" style="margin: 0;">Confirm the address of your AnythingLLM service. It manages vector database indexing (Qdrant).</p>
-        <div class="fields" style="display: flex; flex-direction: column; gap: 12px; margin-top: 12px;">
-          <label style="display: flex; flex-direction: column; gap: 4px;"><span style="font-weight: bold; font-size: 13px;">AnythingLLM URL</span><input id="wizSettingUrl" value="http://localhost:3001/api/v1" style="padding: 10px; border-radius: 8px; border: 1px solid var(--border);" /></label>
-          <label style="display: flex; flex-direction: column; gap: 4px;"><span style="font-weight: bold; font-size: 13px;">AnythingLLM API Key (Optional)</span><input id="wizSettingKey" type="text" placeholder="Paste AnythingLLM API key" style="padding: 10px; border-radius: 8px; border: 1px solid var(--border);" /></label>
-        </div>
-      </div>
-
-      <!-- Step 4: Roles & Manifest -->
-      <div id="wizStep4" class="wizard-step-panel hidden stack" style="gap: 12px;">
-        <h3 style="margin: 0;">Step 4: Fallback Static Council Roles</h3>
-        <p class="muted" style="margin: 0;"><em>(Note: For Dynamic Councils, roles are automatically generated on the fly depending on your idea!)</em> Select which active roles you want included in your custom Static Council template below:</p>
-
-        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-top: 12px;">
-          <label style="display: flex; align-items: center; gap: 8px; font-weight: normal; cursor: pointer; background: rgba(0,0,0,0.02); padding: 10px; border-radius: 8px; border: 1px solid var(--border);"><input id="wizRoleSyn" type="checkbox" checked /> ✍️ Lead Synthesist</label>
-          <label style="display: flex; align-items: center; gap: 8px; font-weight: normal; cursor: pointer; background: rgba(0,0,0,0.02); padding: 10px; border-radius: 8px; border: 1px solid var(--border);"><input id="wizRoleExp" type="checkbox" checked /> 🔬 Domain Expert</label>
-          <label style="display: flex; align-items: center; gap: 8px; font-weight: normal; cursor: pointer; background: rgba(0,0,0,0.02); padding: 10px; border-radius: 8px; border: 1px solid var(--border);"><input id="wizRoleMkt" type="checkbox" checked /> 📈 Growth & Marketing</label>
-          <label style="display: flex; align-items: center; gap: 8px; font-weight: normal; cursor: pointer; background: rgba(0,0,0,0.02); padding: 10px; border-radius: 8px; border: 1px solid var(--border);"><input id="wizRolePol" type="checkbox" checked /> ⚖️ Policy Reviewer</label>
-          <label style="display: flex; align-items: center; gap: 8px; font-weight: normal; cursor: pointer; background: rgba(0,0,0,0.02); padding: 10px; border-radius: 8px; border: 1px solid var(--border);"><input id="wizRoleRsk" type="checkbox" checked /> 🛡️ Risk Officer</label>
-        </div>
-      </div>
-
-      <!-- Step 5: Finish -->
-      <div id="wizStep5" class="wizard-step-panel hidden stack" style="gap: 16px; text-align: center;">
-        <div style="font-size: 48px;">🎉</div>
-        <h3 style="margin: 0;">Setup Complete!</h3>
-        <p class="muted" style="margin: 0; max-width: 450px; margin: 0 auto;">Your custom council is ready to convene. Click the button below to save your preferences and start deliberating!</p>
-      </div>
-    </div>
-    
-    <!-- Navigation Buttons -->
-    <div style="display: flex; justify-content: space-between; align-items: center; border-top: 1px solid var(--border); padding-top: 16px; margin-top: 8px;">
-      <button id="wizPrevBtn" class="button" style="margin: 0; padding: 10px 20px; border-radius: 12px; display: none;"><i data-lucide="arrow-left"></i> Back</button>
-      <div style="flex: 1;"></div>
-      <button id="wizNextBtn" class="primary" style="margin: 0; padding: 10px 24px; border-radius: 12px; display: inline-flex; align-items: center; gap: 6px;">Next <i data-lucide="arrow-right"></i></button>
-      <button id="wizSaveBtn" class="primary hidden" style="margin: 0; padding: 10px 24px; border-radius: 12px; display: inline-flex; align-items: center; gap: 6px;"><i data-lucide="save"></i> Complete Setup</button>
-    </div>
-  </div>
-
-  <div id="toastContainer" class="toast-container"></div>
-  <script type="module" src="/avatar.js"></script>
-  <script type="module" src="/app.js"></script>
-  <script>
-    // Initialize Lucide icons
-    lucide.createIcons();
-  </script>
+  <div id="toastContainer" class="toast-container"></div><div id="confettiLayer" aria-hidden="true"></div>
+  <script type="module" src="/fold-field.js"></script><script type="module" src="/avatar.js"></script><script type="module" src="/app.js"></script>
+  <script>if (window.lucide) window.lucide.createIcons();</script>
 </body>
 </html>

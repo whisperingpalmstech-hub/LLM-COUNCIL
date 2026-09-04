@@ -1,0 +1,13 @@
+flowchart LR
+  User[Browser or phone user] --> UI[Synod web UI]
+  User --> Mobile[Mobile evidence portal]
+  UI --> API[Express API]
+  Mobile --> API
+  API --> Engine[Council orchestrator]
+  Engine --> DB[(SQLite)]
+  Engine --> Vault[(Obsidian Markdown vault)]
+  Engine --> Uploads[(Host uploads)]
+  Engine --> LLM[Configured LLM provider]
+  Engine --> Anything[AnythingLLM]
+  Engine --> Search[Optional search]
+  API --> Scout[GitHub Scout]

@@ -1,0 +1,13 @@
+flowchart TD
+  Start[Role response needed] --> Primary[Primary provider]
+  Primary --> Valid{Valid structured response?}
+  Valid -->|yes| Normalize[Normalize and persist]
+  Valid -->|no| Fallback{AnythingLLM fallback available?}
+  Fallback -->|yes| Anything[AnythingLLM fallback]
+  Anything --> FallbackValid{Valid?}
+  FallbackValid -->|yes| Normalize
+  FallbackValid -->|no| Warning[Persist warning]
+  Fallback -->|no| Warning
+  Warning --> Verdict[Use remaining usable evidence]
+  Normalize --> Verdict
+  Verdict --> UI[Readable brief and resilience notice]

@@ -1,0 +1,12 @@
+flowchart LR
+  Prompt[Prompt] --> Session[Session context]
+  File[Desktop attachment] --> Session
+  Phone[Phone image/audio/note] --> Session
+  Scout[GitHub Scout report] --> Session
+  Session --> Consent{Saved context enabled?}
+  Consent -->|yes| Retrieve[Retrieve relevant vault notes]
+  Consent -->|no| Council[Council]
+  Retrieve --> Council
+  Search[Optional web search] --> Council
+  Council --> Verdict[Verdict]
+  Verdict --> Vault[Write decision memory]

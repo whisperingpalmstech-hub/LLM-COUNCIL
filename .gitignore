@@ -7,9 +7,11 @@ pnpm-debug.log*
 .env
 .env.local
 .env.*.local
+.env.bak*
 
 data/*.sqlite
 data/*.sqlite-*
+data/*.db
 
 .DS_Store
 Thumbs.db
@@ -18,8 +20,10 @@ dist/
 build/
 .cache/
 coverage/
+artifacts/
 
 scratch/
+.hermes/
 
 # Runtime logs
 *.log

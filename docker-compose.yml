@@ -1,12 +1,21 @@
 services:
   synod:
     build: .
+    init: true
+    restart: unless-stopped
+    stop_grace_period: 2m
     ports:
       - "3000:3000"
     volumes:
       - ./data:/app/data
     env_file:
       - .env
+    environment:
+      # localhost inside this container is Synod itself, so use the service name.
+      ANYTHINGLLM_BASE_URL: ${ANYTHINGLLM_DOCKER_BASE_URL:-http://anythingllm:3001}
+      PROVIDER_REQUEST_TIMEOUT_MS: ${PROVIDER_REQUEST_TIMEOUT_MS:-60000}
+      ANYTHINGLLM_REQUEST_TIMEOUT_MS: ${ANYTHINGLLM_REQUEST_TIMEOUT_MS:-15000}
+      PROVIDER_MAX_RETRIES: ${PROVIDER_MAX_RETRIES:-1}
     depends_on:
       - anythingllm
     networks:
@@ -14,6 +23,8 @@ services:
 
   anythingllm:
     image: mintplexlabs/anythingllm
+    restart: unless-stopped
+    stop_grace_period: 2m
     ports:
       - "3001:3001"
     volumes:
@@ -21,6 +32,14 @@ services:
     environment:
       - STORAGE_DIR=/app/server/storage
       - SERVER_PORT=3001
+      # Give AnythingLLM its own runtime access to the same configured model
+      # provider Synod uses. Workspace chat otherwise defaults to OpenAI and
+      # fails even though the Synod integration key is valid.
+      - LLM_PROVIDER=deepseek
+      - DEEPSEEK_API_KEY=${DEEPSEEK_API_KEY}
+      # The configured DeepSeek account exposes the v4 models; `deepseek-chat`
+      # is not accepted by its current model-list API.
+      - DEEPSEEK_MODEL_PREF=${DEEPSEEK_MODEL:-deepseek-v4-flash}
     networks:
       - synod_network
 

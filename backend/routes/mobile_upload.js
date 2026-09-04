@@ -8,7 +8,7 @@ import { id, now } from "../db/sqlite.js";
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const uploadDir = path.resolve(__dirname, "../../data/uploads");
 
-export function createMobileUploadRouter({ db, events }) {
+export function createMobileUploadRouter({ db, events, env = process.env }) {
   const router = express.Router();
 
   // Helper to get local IP address
@@ -24,7 +24,8 @@ export function createMobileUploadRouter({ db, events }) {
       }
       if (localIp !== "localhost") break;
     }
-    res.json({ ip: localIp });
+    const publicBaseUrl = String(env.PUBLIC_BASE_URL || "").trim().replace(/\/$/, "");
+    res.json({ ip: localIp, publicBaseUrl });
   });
 
   router.post("/upload", async (req, res, next) => {
@@ -33,6 +34,9 @@ export function createMobileUploadRouter({ db, events }) {
       
       if (!sessionId) {
         return res.status(400).json({ error: "sessionId is required" });
+      }
+      if (!db.prepare("select id from sessions where id = ?").get(sessionId)) {
+        return res.status(404).json({ error: "Session not found" });
       }
 
       if (!fs.existsSync(uploadDir)) {
@@ -49,7 +53,8 @@ export function createMobileUploadRouter({ db, events }) {
         }
 
         const buffer = Buffer.from(matches[2], "base64");
-        const safeName = `${id()}-${fileName || "upload"}`;
+        if (buffer.length > 8 * 1024 * 1024) return res.status(413).json({ error: "File exceeds the 8 MB upload limit" });
+        const safeName = `${id()}-${safeFileName(fileName)}`;
         const filePath = path.join(uploadDir, safeName);
         
         fs.writeFileSync(filePath, buffer);
@@ -95,4 +100,8 @@ export function createMobileUploadRouter({ db, events }) {
   });
 
   return router;
+}
+
+function safeFileName(value) {
+  return path.basename(String(value || "upload")).replace(/[^a-z0-9._-]/gi, "_").slice(0, 120) || "upload";
 }

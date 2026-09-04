@@ -24,6 +24,7 @@ class SpeechEngine {
     this.synth.cancel();
     
     const utterance = new SpeechSynthesisUtterance(text);
+    utterance.lang = document.documentElement.lang || "en";
     if (this.voice) utterance.voice = this.voice;
     
     utterance.onstart = () => onStart?.();
@@ -53,8 +54,22 @@ class AvatarHost {
 
   bindEvents() {
     if (this.overlay) {
-      this.overlay.addEventListener("click", () => this.initializeWelcome());
+      this.overlay.addEventListener("click", () => this.toggleOutput());
     }
+  }
+
+  toggleOutput() {
+    this.setOutputEnabled(!this.initialized);
+  }
+
+  setOutputEnabled(enabled) {
+    this.initialized = Boolean(enabled);
+    const setting = $("settingEnableVoice");
+    if (setting) setting.checked = this.initialized;
+    this.overlay?.setAttribute("aria-pressed", String(this.initialized));
+    const status = $("outputVoiceStatus");
+    if (status) status.textContent = this.initialized ? (window.synodTranslate?.("hear_synod_on") || "Hear Synod on") : (window.synodTranslate?.("hear_synod_off") || "Hear Synod off");
+    if (!this.initialized) this.speech.stop();
   }
 
   setState(newState) {
@@ -80,14 +95,7 @@ class AvatarHost {
   }
 
   initializeWelcome() {
-    if (this.initialized) return;
-    this.initialized = true;
-    if (this.overlay) this.overlay.classList.add("hidden");
-    
-    this.lipSyncSpeak(
-      "Hello and welcome to the Synod Superbrain. Input your idea or question below, and our multi-LLM council will orchestrate a specialized execution plan for you.",
-      () => {}
-    );
+    if (!this.initialized) this.toggleOutput();
   }
 
   triggerGuide(text) {
@@ -95,27 +103,17 @@ class AvatarHost {
   }
 
   onSessionStart() {
-    if (!this.initialized) return;
-    this.lipSyncSpeak("Excellent. The council is convening. I will orchestrate the debate and generate the agentic payload once consensus is reached.", () => {
-    });
+    // Progress is already visible and announced by the live region. Avoid
+    // speaking canned English over a multilingual conversation.
   }
 
   onRoundComplete(roundNumber) {
-    if (!this.initialized) return;
-    const phrases = [
-      `Round ${roundNumber} completed.`,
-      `Proceeding from round ${roundNumber}.`,
-      `Analysis for round ${roundNumber} is finished.`
-    ];
-    this.triggerGuide(phrases[Math.floor(Math.random() * phrases.length)]);
+    void roundNumber;
   }
 
   onVerdict(verdictSummary) {
     if (!this.initialized) return;
-    this.lipSyncSpeak(
-      "The debate has concluded. Here is your final orchestration payload. " + verdictSummary,
-      () => {}
-    );
+    this.lipSyncSpeak(verdictSummary, () => {});
   }
 }
 

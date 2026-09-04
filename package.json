@@ -10,8 +10,9 @@
     "migrate": "node backend/db/sqlite.js migrate",
     "seed": "node scripts/seed-default-councils.js",
     "setup-workspaces": "node scripts/setup-anythingllm-workspaces.js",
-    "test": "node --test tests/unit/*.test.js tests/integration/*.test.js"
-
+    "check": "node --check backend/app.js && node --check backend/voice_stream.js && node --check backend/core/orchestrator.js && node --check backend/adapters/llm.js && node --check backend/routes/scout.js && node --check frontend/app.js",
+    "test": "node --test tests/unit/*.test.js tests/integration/*.test.js",
+    "test:e2e:browser": "node tests/e2e/browser-e2e.mjs"
   },
   "engines": {
     "node": ">=22"
@@ -19,7 +20,8 @@
   "dependencies": {
     "cors": "^2.8.5",
     "dotenv": "^16.4.7",
-    "express": "^4.21.2"
+    "express": "^4.21.2",
+    "three": "^0.160.0"
   },
   "devDependencies": {
     "supertest": "^7.0.0"

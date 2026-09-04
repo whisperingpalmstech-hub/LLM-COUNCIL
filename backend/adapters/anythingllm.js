@@ -1,17 +1,18 @@
 import { openDatabase } from "../db/sqlite.js";
 
 export class AnythingLlmClient {
-  constructor(env = process.env) {
+  constructor(env = process.env, options = {}) {
+    this.env = env;
     const resolve = (raw) => {
       if (!raw) return raw;
       // Normalise: ensure the base URL includes /api/v1 (bare host -> host/api/v1)
       return raw.endsWith("/api/v1") ? raw : raw.replace(/\/$/, "") + "/api/v1";
     };
     try {
-      const db = openDatabase();
+      const db = options.db ?? openDatabase();
       const settings = db.prepare("select key, value from system_settings").all().reduce((acc, row) => ({ ...acc, [row.key]: row.value }), {});
-      this.baseUrl = resolve(settings.ANYTHINGLLM_BASE_URL || env.ANYTHINGLLM_BASE_URL) || "http://localhost:3001/api/v1";
-      this.apiKey = settings.ANYTHINGLLM_API_KEY || env.ANYTHINGLLM_API_KEY;
+      this.baseUrl = resolve(settings.ANYTHINGLLM_BASE_URL || settings.ANYTHING_LLM_URL || env.ANYTHINGLLM_BASE_URL) || "http://localhost:3001/api/v1";
+      this.apiKey = settings.ANYTHINGLLM_API_KEY || settings.ANYTHING_LLM_API_KEY || env.ANYTHINGLLM_API_KEY;
     } catch(e) {
       this.baseUrl = resolve(env.ANYTHINGLLM_BASE_URL) || "http://localhost:3001/api/v1";
       this.apiKey = env.ANYTHINGLLM_API_KEY;
@@ -19,12 +20,12 @@ export class AnythingLlmClient {
   }
 
   async health() {
-    if (!this.baseUrl || !this.apiKey) return { ok: true, mode: "mock", message: "AnythingLLM mock is active." };
+    if (!this.baseUrl || !this.apiKey) return { ok: false, configured: false, mode: "disabled", message: "AnythingLLM is not configured." };
     try {
-      const res = await fetch(`${this.baseUrl}/workspaces`, {
+      const res = await fetchWithTimeout(`${this.baseUrl}/auth`, {
         headers: { Authorization: `Bearer ${this.apiKey}` }
-      });
-      return { ok: res.ok, mode: "real", status: res.status };
+      }, 10000);
+      return { ok: res.ok, configured: true, mode: "real", status: res.status };
     } catch (error) {
       return { ok: false, mode: "real", error: error.message };
     }
@@ -51,45 +52,32 @@ export class AnythingLlmClient {
   async chat({ workspaceId, prompt, mode = "chat" }) {
     if (!workspaceId) throw new Error("AnythingLLM workspace_id is required for workspace-chain execution.");
     if (!this.baseUrl || !this.apiKey) {
-      return {
-        mode: "mock",
-        textResponse: JSON.stringify({
-          confidence: 0.72,
-          shortSummary: `Mock AnythingLLM workspace ${workspaceId} responded as a council agent.`,
-          keyClaims: [
-            `Workspace ${workspaceId} can act as an isolated council agent.`,
-            "Synod should validate and render compact structured responses."
-          ],
-          knowledgeGaps: ["Connect a real AnythingLLM instance to replace this mock response."],
-          agreements: [],
-          disagreements: [],
-          verifications: [],
-          falsifications: [],
-          knowledgeSourcesUsed: [{ type: "ANYTHINGLLM_WORKSPACE", workspaceId, mode: "mock" }],
-          flags: ["MOCK_ANYTHINGLLM"]
-        })
-      };
+      throw new Error("AnythingLLM is not configured.");
     }
-    const res = await fetch(`${this.baseUrl}/workspace/${workspaceId}/chat`, {
+    const res = await fetchWithTimeout(`${this.baseUrl}/workspace/${encodeURIComponent(workspaceId)}/chat`, {
       method: "POST",
       headers: { "Content-Type": "application/json", Authorization: `Bearer ${this.apiKey}` },
       body: JSON.stringify({ message: prompt, mode })
-    });
-    if (!res.ok) throw new Error(`AnythingLLM workspace chat failed with HTTP ${res.status}`);
+    }, anythingRequestTimeoutMs(this.env));
+    if (!res.ok) {
+      const body = await res.json().catch(() => ({}));
+      const detail = body.error || body.message;
+      throw new Error(`AnythingLLM workspace chat failed with HTTP ${res.status}${detail ? `: ${detail}` : ""}`);
+    }
     return { mode: "real", ...(await res.json()) };
   }
 
   async createWorkspace(name) {
     if (!this.baseUrl || !this.apiKey) return { slug: name.toLowerCase().replace(/[^a-z0-9]/g, "-") };
     try {
-      const res = await fetch(`${this.baseUrl}/workspaces/new`, {
+      const res = await fetchWithTimeout(`${this.baseUrl}/workspaces/new`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
           Authorization: `Bearer ${this.apiKey}`
         },
         body: JSON.stringify({ name })
-      });
+      }, anythingRequestTimeoutMs(this.env));
       if (!res.ok) throw new Error(`Failed to create workspace: ${res.status}`);
       const data = await res.json();
       return data.workspace; // returns { id, name, slug }
@@ -110,20 +98,20 @@ export class AnythingLlmClient {
       const blob = new Blob([buffer], { type: fileMime });
       formData.append("file", blob, fileName);
 
-      const uploadRes = await fetch(`${this.baseUrl}/document/upload`, {
+      const uploadRes = await fetchWithTimeout(`${this.baseUrl}/document/upload`, {
         method: "POST",
         headers: {
           Authorization: `Bearer ${this.apiKey}`
         },
         body: formData
-      });
+      }, anythingRequestTimeoutMs(this.env));
       if (!uploadRes.ok) throw new Error(`Upload failed: ${uploadRes.status}`);
       const uploadData = await uploadRes.json();
       
       const docLocation = uploadData.documents?.[0]?.location;
       if (!docLocation) throw new Error("No document location returned from upload");
 
-      const embedRes = await fetch(`${this.baseUrl}/workspace/${workspaceSlug}/update-embeddings`, {
+      const embedRes = await fetchWithTimeout(`${this.baseUrl}/workspace/${encodeURIComponent(workspaceSlug)}/update-embeddings`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -133,7 +121,7 @@ export class AnythingLlmClient {
           adds: [docLocation],
           deletes: []
         })
-      });
+      }, anythingRequestTimeoutMs(this.env));
       if (!embedRes.ok) throw new Error(`Embedding update failed: ${embedRes.status}`);
       console.log(`[AnythingLLM Client] Vectorized document ${fileName} into workspace ${workspaceSlug}`);
       return true;
@@ -142,4 +130,22 @@ export class AnythingLlmClient {
       return false;
     }
   }
+}
+
+async function fetchWithTimeout(url, options, timeoutMs) {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    return await fetch(url, { ...options, signal: controller.signal });
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
+function anythingRequestTimeoutMs(env) {
+  // AnythingLLM is an optional workspace/memory integration. Keep it bounded
+  // independently from a primary model request so an offline Docker service
+  // never makes a council turn appear frozen.
+  const configured = Number(env.ANYTHINGLLM_REQUEST_TIMEOUT_MS);
+  return Number.isFinite(configured) && configured >= 5000 && configured <= 60000 ? configured : 15000;
 }

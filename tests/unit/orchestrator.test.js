@@ -1,10 +1,18 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { EventEmitter } from "node:events";
+import { mkdtempSync } from "node:fs";
+import os from "node:os";
+import path from "node:path";
 import { openDatabase, migrate } from "../../backend/db/sqlite.js";
 import { CouncilOrchestrator } from "../../backend/core/orchestrator.js";
 
-const mockEnv = { ...process.env, PROVIDER_MODE: "mock", ANYTHINGLLM_API_KEY: "" };
+const mockEnv = {
+  ...process.env,
+  PROVIDER_MODE: "mock",
+  ANYTHINGLLM_API_KEY: "",
+  OBSIDIAN_VAULT_PATH: mkdtempSync(path.join(os.tmpdir(), "synod-unit-vault-"))
+};
 
 function createOrchestrator(db) {
   return new CouncilOrchestrator({ db, events: new EventEmitter(), env: mockEnv });
@@ -99,3 +107,55 @@ test("LlmResearcher researches latest models and writes them to settings", async
   assert.equal(parsed.length, recommendations.length);
 });
 
+test("conversation follow-ups retain the prior decision as scoped context", async () => {
+  const db = openDatabase(":memory:");
+  migrate(db);
+  const orchestrator = createOrchestrator(db);
+  const first = await orchestrator.createSession({ topic: "Choose a first career step.", mode: "fast", maxRounds: 1, autoStart: false });
+  await orchestrator.runSession(first.id);
+  const completed = orchestrator.getSession(first.id);
+  const followUp = await orchestrator.createSession({
+    topic: "What should I do in the next 30 days?",
+    mode: "fast",
+    maxRounds: 1,
+    conversationId: completed.conversation_id,
+    followUpTo: completed.id,
+    autoStart: false
+  });
+  assert.equal(followUp.conversation_id, completed.conversation_id);
+  assert.ok(orchestrator.messages(followUp.id).some((message) => message.model_name === "conversation-context"));
+});
+
+test("conversation archive and restore are non-destructive and idempotent", async () => {
+  const db = openDatabase(":memory:");
+  migrate(db);
+  const orchestrator = createOrchestrator(db);
+  const session = await orchestrator.createSession({ topic: "Preserve this decision trail.", mode: "fast", maxRounds: 1, autoStart: false });
+
+  const archived = orchestrator.archiveConversation(session.conversation_id);
+  assert.ok(archived.archived_at);
+  assert.equal(orchestrator.archiveConversation(session.conversation_id).archived_at, archived.archived_at);
+  assert.equal(orchestrator.listConversations({ state: "active" }).length, 0);
+  assert.equal(orchestrator.listConversations({ state: "archived" }).length, 1);
+  assert.equal(orchestrator.listSessions({ state: "archived" })[0].id, session.id);
+  assert.equal(orchestrator.getSession(session.id).topic, session.topic);
+
+  const restored = orchestrator.restoreConversation(session.conversation_id);
+  assert.equal(restored.archived_at, null);
+  assert.equal(orchestrator.restoreConversation(session.conversation_id).archived_at, null);
+  assert.equal(orchestrator.listConversations({ state: "active" }).length, 1);
+  assert.equal(orchestrator.listSessions({ state: "active" })[0].id, session.id);
+});
+
+test("budget caps pause deliberation for explicit approval instead of failing", async () => {
+  const db = openDatabase(":memory:");
+  migrate(db);
+  const orchestrator = new CouncilOrchestrator({ db, events: new EventEmitter(), env: { ...mockEnv, PROVIDER_MODE: "deepseek" } });
+  const session = await orchestrator.createSession({ topic: "Assess a product launch risk profile.", mode: "fast", maxRounds: 2, autoStart: false });
+  db.prepare("update sessions set budget_limit_usd = ? where id = ?").run(0.007, session.id);
+  await orchestrator.runSession(session.id);
+  const paused = orchestrator.getSession(session.id);
+  assert.equal(paused.status, "AWAITING_BUDGET_APPROVAL");
+  assert.equal(paused.budget_approval_required, 1);
+  assert.ok(paused.spent_cost_usd > 0);
+});

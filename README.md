@@ -1,6 +1,6 @@
 # Synod
 
-Synod is a complete, mocks-first LLM Council application. It runs out of the box on your computer, then lets you connect OpenAI, Anthropic, Gemini, Tavily/Perplexity, and AnythingLLM when you are ready.
+Synod is a decision-intelligence workspace for structured multi-model deliberation. It runs locally with safe demonstration responses, then connects to OpenAI, Anthropic, Gemini, DeepSeek, OpenRouter, SiliconFlow, Tavily/Perplexity, and AnythingLLM.
 
 Synod implements the LLM Council FRD v1.3 modules M1-M11, including dynamic role assignment, user-defined static councils, veto handling, compact internal communication, transcripts, mock fallbacks, and provider health checks.
 
@@ -16,6 +16,8 @@ This build also supports **AnythingLLM Workspace Chain** mode: a static council 
 ```
 
 ## Quick Start
+
+Guides: [Quick Start](docs/QUICK_START.md) · [User Manual](docs/USER_MANUAL.md) · [Technical and Deployment Manual](docs/TECHNICAL_DEPLOYMENT_MANUAL.md) · [Marketing Brochure](docs/MARKETING_BROCHURE.md) · [Architecture Blueprints](docs/blueprints/README.md)
 
 ### Windows
 
@@ -155,6 +157,9 @@ Each workspace can use a different model configured inside AnythingLLM. Synod se
 - Static councils: create fixed role manifests, hierarchy, model overrides, workspace bindings, and veto roles.
 - Compact internal communication: roles exchange structured JSON, reducing token use and latency.
 - Human-readable transcripts: transcripts are rendered from compact JSON on demand.
+- Executive decision briefs: rationale, evidence, risks, alternatives, actions, success measures, guardrails, and open questions are rendered as readable sections—never as raw JSON.
+- GitHub Scout: safely clones a public canonical GitHub URL, inventories the repository, and loads a production-readiness brief into the council composer.
+- Response repair: unstructured AnythingLLM output receives one constrained formatting repair before being normalized for display.
 - Veto and arbitration: static council veto roles can trigger an extra round.
 - Mock fallbacks: works without paid services.
 - Real integrations: OpenAI, Anthropic, Gemini, Tavily, AnythingLLM-ready adapters.
@@ -185,7 +190,25 @@ Run:
 
 ```bash
 npm test
+npm run test:e2e:browser
 ```
+
+Verify the configured AnythingLLM council in Chrome:
+
+```bash
+BROWSER_E2E_PROVIDER_MODE=anythingllm \
+BROWSER_E2E_COUNCIL_NAME="AnythingLLM Full Council" \
+npm run test:e2e:browser
+```
+
+Verify Scout against a real small public repository:
+
+```bash
+BROWSER_E2E_SCOUT_URL=https://github.com/octocat/Hello-World \
+npm run test:e2e:browser
+```
+
+The browser E2E command launches the installed Google Chrome in headless mode, submits a one-round council session through the visible composer, verifies the rendered verdict/messages/transcript, exercises the Settings connection check, and writes a screenshot under `artifacts/`. It defaults to mock mode; use `BROWSER_E2E_PROVIDER_MODE=deepseek` to verify a configured live provider.
 
 The suite covers:
 
@@ -210,11 +233,21 @@ Synod uses Node's built-in SQLite support, so no native build tools are required
 5. Use provider-side budgets and Synod session budgets.
 6. Run `npm test` after every upgrade.
 
+### Conversation budgets and intelligent routing
+
+Each session receives a conservative cost estimate before any model call. The default cap is the estimate plus 50%, with a minimum set in **Settings → Engine tuning**. Users may supply a lower or higher cap in “Fine-tune this decision”; Synod refuses caps below the initial estimate and pauses for explicit approval before an unexpected additional call can exceed the approved cap. The dashboard reports estimated reserved spend, not provider-billed usage.
+
+Synod uses deterministic role policy by default, so model selection itself does not consume an extra LLM call. [RouteLLM](https://github.com/lm-sys/routellm) is supported as an opt-in OpenAI-compatible routing service: configure its strong/weak provider pair separately, then set `ROUTELLM_ENABLED=true`, `ROUTELLM_BASE_URL`, and `ROUTELLM_THRESHOLD` in `.env`. It is deliberately disabled by default; an unavailable router falls through to the configured Synod provider rather than stopping a decision.
+
 Optional Docker:
 
 ```bash
 docker compose up
 ```
+
+Compose automatically routes Synod to the bundled AnythingLLM container through `http://anythingllm:3001`. To use another reachable service, set `ANYTHINGLLM_DOCKER_BASE_URL`.
+
+For any network-accessible deployment, set a long `SYNOD_ACCESS_PASSWORD` (and optionally `SYNOD_ACCESS_USERNAME`) in `.env`. Synod then protects the UI and API with browser-compatible Basic authentication while leaving only `/api/v1/health` public for container checks. Use HTTPS at the reverse proxy so credentials and provider traffic are encrypted.
 
 ## Troubleshooting
 

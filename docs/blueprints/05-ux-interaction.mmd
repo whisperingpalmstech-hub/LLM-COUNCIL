@@ -1,0 +1,15 @@
+flowchart TD
+  Open[Open Synod] --> Sidebar[Companion sidebar]
+  Sidebar --> Avatar[Avatar / voice]
+  Sidebar --> Quick[Quick answer: fast, one round]
+  Sidebar --> Detailed[Detailed advice: deep, three rounds]
+  Sidebar --> Input[Type or dictate]
+  Sidebar --> Context[Attach context]
+  Input --> Session[Start session]
+  Context --> Session
+  Session --> Route[Mission route and council]
+  Route --> Brief[Decision brief]
+  Route --> Notes[Optional research notes]
+  Session --> QR[QR phone handoff]
+  QR --> Phone[Mobile upload]
+  Sidebar --> Collapse[Collapse while avatar stays available]

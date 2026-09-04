@@ -385,6 +385,159 @@ export const translations = {
   }
 };
 
+const enhancementTranslations = {
+  en: { tab_chat: "Chat", tab_sessions: "Sessions", tab_knowledge: "Knowledge", new_conversation: "New conversation", decision_archive: "Decision archive", active: "Active", archived: "Archived", search_sessions: "Search sessions", sessions_desc: "Open, archive, or restore conversations without losing their evidence.", synod_companion: "Synod companion", hear_synod: "Hear Synod", hear_synod_off: "Hear Synod off", hear_synod_on: "Hear Synod on", conversation: "Conversation", add_context: "Add context", council_activity: "Council activity", report: "Report", decision_complete: "Decision complete", choose_next_step: "Choose whether your next message should use this decision as context.", continue_conversation: "Continue conversation", start_fresh: "Start fresh", archive: "Archive", restore: "Restore", talk: "Talk", stop_recording: "Stop recording", cancel: "Cancel", retry: "Retry", diagnostics: "Diagnostics", ask_synod: "Ask Synod", send_transcript: "Send transcript", record_again: "Record again", voice_checking: "Checking voice readiness…", voice_ready: "Microphone ready. Select Talk when you are ready.", voice_listening: "Listening… Select Stop recording when you are done.", voice_transcribing: "Creating your transcript…", voice_review: "Transcript ready. Review or edit it before sending.", voice_unavailable: "Voice transcription is unavailable. Retry or open diagnostics.", voice_cancelled: "Recording cancelled. Your draft was preserved.", voice_no_speech: "No speech was detected. Check your microphone and try again.", voice_permission: "Microphone access is blocked. Allow access in your browser settings, then retry.", voice_https: "Microphone access requires a secure HTTPS connection.", voice_timeout: "Transcription took too long. Your draft is safe; please retry.", no_active_sessions: "No active conversations.", no_archived_sessions: "No archived conversations.", archive_success: "Conversation archived.", restore_success: "Conversation restored.", continuing_context: "Your next message will continue this conversation.", fresh_context: "Your next message will start without prior conversation context.", start_new_conversation: "Start a new conversation?", fresh_dialog_body: "This clears the current context link. Your saved session will remain available in Sessions.", message_placeholder: "Ask Synod anything, or describe a decision…" },
+  mr: { tab_chat: "चॅट", tab_sessions: "सत्रे", tab_knowledge: "ज्ञान", new_conversation: "नवीन संभाषण", decision_archive: "निर्णय संग्रह", active: "सक्रिय", archived: "संग्रहित", search_sessions: "सत्रे शोधा", sessions_desc: "पुरावे न गमावता संभाषणे उघडा, संग्रहित करा किंवा पुनर्संचयित करा.", synod_companion: "सिनॉड सहचर", hear_synod: "सिनॉड ऐका", hear_synod_off: "सिनॉडचा आवाज बंद", hear_synod_on: "सिनॉडचा आवाज सुरू", conversation: "संभाषण", add_context: "संदर्भ जोडा", council_activity: "कौन्सिल क्रिया", report: "अहवाल", decision_complete: "निर्णय पूर्ण", choose_next_step: "पुढील संदेशात हा निर्णय संदर्भ म्हणून वापरायचा का ते निवडा.", continue_conversation: "संभाषण सुरू ठेवा", start_fresh: "नव्याने सुरू करा", archive: "संग्रहित करा", restore: "पुनर्संचयित करा", talk: "बोला", stop_recording: "रेकॉर्डिंग थांबवा", cancel: "रद्द करा", retry: "पुन्हा प्रयत्न", diagnostics: "निदान", ask_synod: "सिनॉडला विचारा", send_transcript: "प्रतिलेख पाठवा", record_again: "पुन्हा रेकॉर्ड करा", voice_checking: "आवाज सेवा तपासत आहे…", voice_ready: "मायक्रोफोन तयार आहे. तयार झाल्यावर बोला निवडा.", voice_listening: "ऐकत आहे… पूर्ण झाल्यावर रेकॉर्डिंग थांबवा निवडा.", voice_transcribing: "प्रतिलेख तयार करत आहे…", voice_review: "प्रतिलेख तयार आहे. पाठवण्यापूर्वी तपासा किंवा संपादित करा.", voice_unavailable: "आवाज प्रतिलेखन उपलब्ध नाही. पुन्हा प्रयत्न करा किंवा निदान उघडा.", voice_cancelled: "रेकॉर्डिंग रद्द केले. तुमचा मसुदा सुरक्षित आहे.", voice_no_speech: "बोलणे आढळले नाही. मायक्रोफोन तपासून पुन्हा प्रयत्न करा.", voice_permission: "मायक्रोफोन प्रवेश अवरोधित आहे. ब्राउझरमध्ये परवानगी द्या.", voice_https: "मायक्रोफोनसाठी सुरक्षित HTTPS जोडणी आवश्यक आहे.", voice_timeout: "प्रतिलेखनास जास्त वेळ लागला. तुमचा मसुदा सुरक्षित आहे.", no_active_sessions: "सक्रिय संभाषणे नाहीत.", no_archived_sessions: "संग्रहित संभाषणे नाहीत.", archive_success: "संभाषण संग्रहित केले.", restore_success: "संभाषण पुनर्संचयित केले.", continuing_context: "तुमचा पुढील संदेश हे संभाषण पुढे चालू ठेवेल.", fresh_context: "तुमचा पुढील संदेश मागील संदर्भाशिवाय सुरू होईल.", start_new_conversation: "नवीन संभाषण सुरू करायचे?", fresh_dialog_body: "यामुळे सध्याचा संदर्भ दुवा साफ होईल. जतन केलेले सत्र सत्रांमध्ये उपलब्ध राहील.", message_placeholder: "सिनॉडला काहीही विचारा किंवा निर्णयाचे वर्णन करा…" },
+  hi: { tab_chat: "चैट", tab_sessions: "सत्र", tab_knowledge: "ज्ञान", new_conversation: "नई बातचीत", decision_archive: "निर्णय संग्रह", active: "सक्रिय", archived: "संग्रहीत", search_sessions: "सत्र खोजें", sessions_desc: "सबूत खोए बिना बातचीत खोलें, संग्रहित करें या पुनर्स्थापित करें।", synod_companion: "सिनॉड साथी", hear_synod: "सिनॉड को सुनें", hear_synod_off: "सिनॉड की आवाज़ बंद", hear_synod_on: "सिनॉड की आवाज़ चालू", conversation: "बातचीत", add_context: "संदर्भ जोड़ें", council_activity: "काउंसिल गतिविधि", report: "रिपोर्ट", decision_complete: "निर्णय पूरा हुआ", choose_next_step: "चुनें कि अगला संदेश इस निर्णय को संदर्भ के रूप में उपयोग करे या नहीं।", continue_conversation: "बातचीत जारी रखें", start_fresh: "नए सिरे से शुरू करें", archive: "संग्रहित करें", restore: "पुनर्स्थापित करें", talk: "बोलें", stop_recording: "रिकॉर्डिंग रोकें", cancel: "रद्द करें", retry: "फिर कोशिश करें", diagnostics: "निदान", ask_synod: "सिनॉड से पूछें", send_transcript: "प्रतिलेख भेजें", record_again: "फिर रिकॉर्ड करें", voice_checking: "आवाज़ सेवा जाँची जा रही है…", voice_ready: "माइक्रोफ़ोन तैयार है। तैयार होने पर बोलें चुनें।", voice_listening: "सुन रहा है… पूरा होने पर रिकॉर्डिंग रोकें चुनें।", voice_transcribing: "आपका प्रतिलेख बनाया जा रहा है…", voice_review: "प्रतिलेख तैयार है। भेजने से पहले जाँचें या संपादित करें।", voice_unavailable: "आवाज़ प्रतिलेखन उपलब्ध नहीं है। पुनः प्रयास करें या निदान खोलें।", voice_cancelled: "रिकॉर्डिंग रद्द हुई। आपका मसौदा सुरक्षित है।", voice_no_speech: "कोई आवाज़ नहीं मिली। माइक्रोफ़ोन जाँचकर फिर कोशिश करें।", voice_permission: "माइक्रोफ़ोन अनुमति अवरुद्ध है। ब्राउज़र सेटिंग में अनुमति दें।", voice_https: "माइक्रोफ़ोन के लिए सुरक्षित HTTPS कनेक्शन आवश्यक है।", voice_timeout: "प्रतिलेखन में बहुत समय लगा। आपका मसौदा सुरक्षित है।", no_active_sessions: "कोई सक्रिय बातचीत नहीं।", no_archived_sessions: "कोई संग्रहीत बातचीत नहीं।", archive_success: "बातचीत संग्रहित हुई।", restore_success: "बातचीत पुनर्स्थापित हुई।", continuing_context: "आपका अगला संदेश इसी बातचीत को जारी रखेगा।", fresh_context: "आपका अगला संदेश पिछले संदर्भ के बिना शुरू होगा।", start_new_conversation: "नई बातचीत शुरू करें?", fresh_dialog_body: "इससे वर्तमान संदर्भ लिंक हटेगा। सहेजा गया सत्र सत्र सूची में रहेगा।", message_placeholder: "सिनॉड से कुछ भी पूछें या किसी निर्णय का वर्णन करें…" },
+  ru: { tab_chat: "Чат", tab_sessions: "Сеансы", tab_knowledge: "Знания", new_conversation: "Новый разговор", decision_archive: "Архив решений", active: "Активные", archived: "Архив", search_sessions: "Поиск сеансов", sessions_desc: "Открывайте, архивируйте и восстанавливайте разговоры без потери материалов.", synod_companion: "Помощник Synod", hear_synod: "Слушать Synod", hear_synod_off: "Голос Synod выключен", hear_synod_on: "Голос Synod включён", conversation: "Разговор", add_context: "Добавить контекст", council_activity: "Работа совета", report: "Отчёт", decision_complete: "Решение готово", choose_next_step: "Выберите, использовать ли это решение как контекст следующего сообщения.", continue_conversation: "Продолжить разговор", start_fresh: "Начать заново", archive: "В архив", restore: "Восстановить", talk: "Говорить", stop_recording: "Остановить запись", cancel: "Отмена", retry: "Повторить", diagnostics: "Диагностика", ask_synod: "Спросить Synod", send_transcript: "Отправить текст", record_again: "Записать снова", voice_checking: "Проверяем голосовой ввод…", voice_ready: "Микрофон готов. Нажмите «Говорить».", voice_listening: "Слушаю… По завершении остановите запись.", voice_transcribing: "Создаём расшифровку…", voice_review: "Расшифровка готова. Проверьте или исправьте её перед отправкой.", voice_unavailable: "Распознавание речи недоступно. Повторите или откройте диагностику.", voice_cancelled: "Запись отменена. Черновик сохранён.", voice_no_speech: "Речь не обнаружена. Проверьте микрофон и повторите.", voice_permission: "Доступ к микрофону заблокирован. Разрешите его в браузере.", voice_https: "Для микрофона требуется защищённое HTTPS-соединение.", voice_timeout: "Распознавание заняло слишком много времени. Черновик сохранён.", no_active_sessions: "Нет активных разговоров.", no_archived_sessions: "Нет архивных разговоров.", archive_success: "Разговор перенесён в архив.", restore_success: "Разговор восстановлен.", continuing_context: "Следующее сообщение продолжит этот разговор.", fresh_context: "Следующее сообщение начнётся без прежнего контекста.", start_new_conversation: "Начать новый разговор?", fresh_dialog_body: "Текущая связь контекста будет очищена. Сохранённый сеанс останется в разделе «Сеансы».", message_placeholder: "Спросите Synod или опишите решение…" },
+  nl: { tab_chat: "Chat", tab_sessions: "Sessies", tab_knowledge: "Kennis", new_conversation: "Nieuw gesprek", decision_archive: "Besluitarchief", active: "Actief", archived: "Gearchiveerd", search_sessions: "Sessies zoeken", sessions_desc: "Open, archiveer of herstel gesprekken zonder bewijs te verliezen.", synod_companion: "Synod-assistent", hear_synod: "Synod beluisteren", hear_synod_off: "Stem van Synod uit", hear_synod_on: "Stem van Synod aan", conversation: "Gesprek", add_context: "Context toevoegen", council_activity: "Raadsactiviteit", report: "Rapport", decision_complete: "Besluit voltooid", choose_next_step: "Kies of je volgende bericht dit besluit als context gebruikt.", continue_conversation: "Gesprek voortzetten", start_fresh: "Opnieuw beginnen", archive: "Archiveren", restore: "Herstellen", talk: "Praten", stop_recording: "Opname stoppen", cancel: "Annuleren", retry: "Opnieuw proberen", diagnostics: "Diagnostiek", ask_synod: "Vraag Synod", send_transcript: "Transcript verzenden", record_again: "Opnieuw opnemen", voice_checking: "Spraakinvoer controleren…", voice_ready: "Microfoon is gereed. Kies Praten wanneer je klaar bent.", voice_listening: "Luisteren… Stop de opname wanneer je klaar bent.", voice_transcribing: "Transcript maken…", voice_review: "Transcript is klaar. Controleer of bewerk het vóór verzending.", voice_unavailable: "Spraaktranscriptie is niet beschikbaar. Probeer opnieuw of open diagnostiek.", voice_cancelled: "Opname geannuleerd. Je concept is bewaard.", voice_no_speech: "Geen spraak gedetecteerd. Controleer de microfoon en probeer opnieuw.", voice_permission: "Microfoontoegang is geblokkeerd. Sta toegang toe in de browser.", voice_https: "Voor de microfoon is een beveiligde HTTPS-verbinding vereist.", voice_timeout: "Transcriptie duurde te lang. Je concept is veilig.", no_active_sessions: "Geen actieve gesprekken.", no_archived_sessions: "Geen gearchiveerde gesprekken.", archive_success: "Gesprek gearchiveerd.", restore_success: "Gesprek hersteld.", continuing_context: "Je volgende bericht zet dit gesprek voort.", fresh_context: "Je volgende bericht begint zonder eerdere context.", start_new_conversation: "Een nieuw gesprek starten?", fresh_dialog_body: "Hiermee wordt de huidige contextkoppeling gewist. Je opgeslagen sessie blijft beschikbaar.", message_placeholder: "Vraag Synod iets of beschrijf een besluit…" },
+  ar: { tab_chat: "الدردشة", tab_sessions: "الجلسات", tab_knowledge: "المعرفة", new_conversation: "محادثة جديدة", decision_archive: "أرشيف القرارات", active: "نشطة", archived: "مؤرشفة", search_sessions: "البحث في الجلسات", sessions_desc: "افتح المحادثات أو أرشفها أو استعدها دون فقدان الأدلة.", synod_companion: "رفيق سينود", hear_synod: "استمع إلى سينود", hear_synod_off: "صوت سينود متوقف", hear_synod_on: "صوت سينود يعمل", conversation: "المحادثة", add_context: "إضافة سياق", council_activity: "نشاط المجلس", report: "التقرير", decision_complete: "اكتمل القرار", choose_next_step: "اختر ما إذا كانت رسالتك التالية ستستخدم هذا القرار كسياق.", continue_conversation: "متابعة المحادثة", start_fresh: "البدء من جديد", archive: "أرشفة", restore: "استعادة", talk: "تحدث", stop_recording: "إيقاف التسجيل", cancel: "إلغاء", retry: "إعادة المحاولة", diagnostics: "التشخيص", ask_synod: "اسأل سينود", send_transcript: "إرسال النص", record_again: "التسجيل مجددًا", voice_checking: "جارٍ فحص الإدخال الصوتي…", voice_ready: "الميكروفون جاهز. اختر «تحدث» عندما تكون مستعدًا.", voice_listening: "جارٍ الاستماع… أوقف التسجيل عند الانتهاء.", voice_transcribing: "جارٍ إنشاء النص…", voice_review: "النص جاهز. راجعه أو عدّله قبل الإرسال.", voice_unavailable: "النسخ الصوتي غير متاح. أعد المحاولة أو افتح التشخيص.", voice_cancelled: "أُلغي التسجيل. حُفظت مسودتك.", voice_no_speech: "لم يُكتشف كلام. تحقق من الميكروفون وأعد المحاولة.", voice_permission: "الوصول إلى الميكروفون محظور. اسمح به من إعدادات المتصفح.", voice_https: "يتطلب الميكروفون اتصال HTTPS آمنًا.", voice_timeout: "استغرق النسخ وقتًا طويلًا. مسودتك محفوظة.", no_active_sessions: "لا توجد محادثات نشطة.", no_archived_sessions: "لا توجد محادثات مؤرشفة.", archive_success: "تمت أرشفة المحادثة.", restore_success: "تمت استعادة المحادثة.", continuing_context: "ستتابع رسالتك التالية هذه المحادثة.", fresh_context: "ستبدأ رسالتك التالية دون السياق السابق.", start_new_conversation: "بدء محادثة جديدة؟", fresh_dialog_body: "سيؤدي هذا إلى مسح رابط السياق الحالي. ستبقى الجلسة المحفوظة متاحة في الجلسات.", message_placeholder: "اسأل سينود أي شيء أو صف قرارًا…" },
+  es: { tab_chat: "Chat", tab_sessions: "Sesiones", tab_knowledge: "Conocimiento", new_conversation: "Nueva conversación", decision_archive: "Archivo de decisiones", active: "Activas", archived: "Archivadas", search_sessions: "Buscar sesiones", sessions_desc: "Abre, archiva o restaura conversaciones sin perder sus pruebas.", synod_companion: "Compañero Synod", hear_synod: "Escuchar a Synod", hear_synod_off: "Voz de Synod desactivada", hear_synod_on: "Voz de Synod activada", conversation: "Conversación", add_context: "Añadir contexto", council_activity: "Actividad del consejo", report: "Informe", decision_complete: "Decisión completada", choose_next_step: "Elige si tu próximo mensaje debe usar esta decisión como contexto.", continue_conversation: "Continuar conversación", start_fresh: "Empezar de cero", archive: "Archivar", restore: "Restaurar", talk: "Hablar", stop_recording: "Detener grabación", cancel: "Cancelar", retry: "Reintentar", diagnostics: "Diagnóstico", ask_synod: "Preguntar a Synod", send_transcript: "Enviar transcripción", record_again: "Grabar de nuevo", voice_checking: "Comprobando la entrada de voz…", voice_ready: "El micrófono está listo. Selecciona Hablar cuando quieras.", voice_listening: "Escuchando… Detén la grabación cuando termines.", voice_transcribing: "Creando la transcripción…", voice_review: "La transcripción está lista. Revísala o edítala antes de enviarla.", voice_unavailable: "La transcripción de voz no está disponible. Reintenta o abre el diagnóstico.", voice_cancelled: "Grabación cancelada. Tu borrador se conservó.", voice_no_speech: "No se detectó voz. Comprueba el micrófono e inténtalo de nuevo.", voice_permission: "El acceso al micrófono está bloqueado. Permítelo en el navegador.", voice_https: "El micrófono requiere una conexión HTTPS segura.", voice_timeout: "La transcripción tardó demasiado. Tu borrador está seguro.", no_active_sessions: "No hay conversaciones activas.", no_archived_sessions: "No hay conversaciones archivadas.", archive_success: "Conversación archivada.", restore_success: "Conversación restaurada.", continuing_context: "Tu próximo mensaje continuará esta conversación.", fresh_context: "Tu próximo mensaje comenzará sin contexto previo.", start_new_conversation: "¿Iniciar una nueva conversación?", fresh_dialog_body: "Esto elimina el vínculo de contexto actual. La sesión guardada seguirá disponible en Sesiones.", message_placeholder: "Pregunta algo a Synod o describe una decisión…" },
+  de: { tab_chat: "Chat", tab_sessions: "Sitzungen", tab_knowledge: "Wissen", new_conversation: "Neue Unterhaltung", decision_archive: "Entscheidungsarchiv", active: "Aktiv", archived: "Archiviert", search_sessions: "Sitzungen suchen", sessions_desc: "Unterhaltungen öffnen, archivieren oder wiederherstellen, ohne Nachweise zu verlieren.", synod_companion: "Synod-Begleiter", hear_synod: "Synod anhören", hear_synod_off: "Synod-Stimme aus", hear_synod_on: "Synod-Stimme an", conversation: "Unterhaltung", add_context: "Kontext hinzufügen", council_activity: "Ratsaktivität", report: "Bericht", decision_complete: "Entscheidung abgeschlossen", choose_next_step: "Wähle, ob deine nächste Nachricht diese Entscheidung als Kontext verwenden soll.", continue_conversation: "Unterhaltung fortsetzen", start_fresh: "Neu beginnen", archive: "Archivieren", restore: "Wiederherstellen", talk: "Sprechen", stop_recording: "Aufnahme stoppen", cancel: "Abbrechen", retry: "Erneut versuchen", diagnostics: "Diagnose", ask_synod: "Synod fragen", send_transcript: "Transkript senden", record_again: "Erneut aufnehmen", voice_checking: "Spracheingabe wird geprüft…", voice_ready: "Das Mikrofon ist bereit. Wähle Sprechen, wenn du bereit bist.", voice_listening: "Ich höre zu… Stoppe die Aufnahme, wenn du fertig bist.", voice_transcribing: "Transkript wird erstellt…", voice_review: "Das Transkript ist bereit. Prüfe oder bearbeite es vor dem Senden.", voice_unavailable: "Sprachtranskription ist nicht verfügbar. Versuche es erneut oder öffne die Diagnose.", voice_cancelled: "Aufnahme abgebrochen. Dein Entwurf wurde beibehalten.", voice_no_speech: "Keine Sprache erkannt. Prüfe das Mikrofon und versuche es erneut.", voice_permission: "Der Mikrofonzugriff ist blockiert. Erlaube ihn in den Browsereinstellungen.", voice_https: "Das Mikrofon benötigt eine sichere HTTPS-Verbindung.", voice_timeout: "Die Transkription dauerte zu lange. Dein Entwurf ist sicher.", no_active_sessions: "Keine aktiven Unterhaltungen.", no_archived_sessions: "Keine archivierten Unterhaltungen.", archive_success: "Unterhaltung archiviert.", restore_success: "Unterhaltung wiederhergestellt.", continuing_context: "Deine nächste Nachricht setzt diese Unterhaltung fort.", fresh_context: "Deine nächste Nachricht beginnt ohne vorherigen Kontext.", start_new_conversation: "Neue Unterhaltung beginnen?", fresh_dialog_body: "Dadurch wird die aktuelle Kontextverknüpfung gelöscht. Die gespeicherte Sitzung bleibt verfügbar.", message_placeholder: "Frage Synod etwas oder beschreibe eine Entscheidung…" }
+};
+
+const voiceLanguageLabels = {
+  en: ["Spoken language", "Auto detect"], mr: ["बोलण्याची भाषा", "स्वयंचलित ओळख"],
+  hi: ["बोली जाने वाली भाषा", "स्वतः पहचानें"], ru: ["Язык речи", "Определять автоматически"],
+  nl: ["Gesproken taal", "Automatisch detecteren"], ar: ["لغة التحدث", "اكتشاف تلقائي"],
+  es: ["Idioma hablado", "Detección automática"], de: ["Gesprochene Sprache", "Automatisch erkennen"]
+};
+Object.entries(voiceLanguageLabels).forEach(([lang, [spoken_language, auto_detect]]) => Object.assign(enhancementTranslations[lang], { spoken_language, auto_detect }));
+
+const voiceFlowTranslations = {
+  en: {
+    voice_greeting: "Hi — I’m getting voice ready so your first words are not clipped.",
+    voice_warming: "Voice is warming up. You can press Talk now; I’ll keep preparing in the background.",
+    voice_listening_live: "Listening and building a live transcript…",
+    voice_live_transcribing: "Updating the live transcript…",
+    voice_finalizing: "Final Whisper pass is checking the whole sentence…",
+    voice_waiting_for_voice: "waiting for your voice",
+    voice_pause_detected: "Pause detected. Finalizing your transcript…",
+    voice_auto_sending: "Let me think this through… sending your transcript.",
+    voice_filler_think: "Let me think this through.",
+    voice_batch_queued: "Voice batch captured. I’ll send it as soon as Synod is ready.",
+    voice_batch_sent: "Voice batch sent to Synod.",
+    voice_batches_sent: "Voice batches are queued or sent. Synod will answer as they complete.",
+    voice_batching: "batches",
+    voice_server_unreachable: "Synod is not reachable, so voice cannot start. Start the app server, then retry."
+  },
+  mr: {
+    voice_greeting: "नमस्कार — तुमचे पहिले शब्द कापले जाऊ नयेत म्हणून आवाज तयार करत आहे.",
+    voice_warming: "आवाज सेवा तयार होत आहे. तुम्ही आता बोला दाबू शकता; तयारी पार्श्वभूमीत सुरू राहील.",
+    voice_listening_live: "ऐकत आहे आणि थेट प्रतिलेख तयार करत आहे…",
+    voice_live_transcribing: "थेट प्रतिलेख अद्ययावत करत आहे…",
+    voice_finalizing: "अंतिम Whisper तपासणी संपूर्ण वाक्य तपासत आहे…",
+    voice_waiting_for_voice: "तुमच्या आवाजाची वाट पाहत आहे",
+    voice_pause_detected: "थांबा आढळला. प्रतिलेख अंतिम करत आहे…",
+    voice_auto_sending: "मी याचा विचार करतो… तुमचा प्रतिलेख पाठवत आहे.",
+    voice_filler_think: "मी याचा विचार करतो.",
+    voice_batch_queued: "आवाजाचा भाग नोंदवला. सिनॉड तयार होताच मी तो पाठवेन.",
+    voice_batch_sent: "आवाजाचा भाग सिनॉडकडे पाठवला.",
+    voice_batches_sent: "आवाजाचे भाग रांगेत आहेत किंवा पाठवले आहेत. पूर्ण होताच सिनॉड उत्तर देईल.",
+    voice_batching: "भाग",
+    voice_server_unreachable: "सिनॉड उपलब्ध नाही, म्हणून आवाज सुरू होऊ शकत नाही. अॅप सर्व्हर सुरू करून पुन्हा प्रयत्न करा."
+  },
+  hi: {
+    voice_greeting: "नमस्ते — मैं आवाज़ तैयार कर रहा हूँ ताकि आपके पहले शब्द कटें नहीं।",
+    voice_warming: "आवाज़ सेवा तैयार हो रही है। आप अभी बोलें दबा सकते हैं; तैयारी पृष्ठभूमि में चलती रहेगी।",
+    voice_listening_live: "सुन रहा हूँ और लाइव प्रतिलेख बना रहा हूँ…",
+    voice_live_transcribing: "लाइव प्रतिलेख अपडेट हो रहा है…",
+    voice_finalizing: "अंतिम Whisper जाँच पूरे वाक्य को परख रही है…",
+    voice_waiting_for_voice: "आपकी आवाज़ की प्रतीक्षा है",
+    voice_pause_detected: "ठहराव मिला। आपका प्रतिलेख अंतिम किया जा रहा है…",
+    voice_auto_sending: "मैं इस पर सोचता हूँ… आपका प्रतिलेख भेज रहा हूँ।",
+    voice_filler_think: "मैं इस पर सोचता हूँ।",
+    voice_batch_queued: "आवाज़ का भाग कैप्चर हुआ। Synod तैयार होते ही मैं इसे भेज दूँगा।",
+    voice_batch_sent: "आवाज़ का भाग Synod को भेजा गया।",
+    voice_batches_sent: "आवाज़ के भाग कतार में हैं या भेज दिए गए हैं। पूरा होते ही Synod जवाब देगा।",
+    voice_batching: "भाग",
+    voice_server_unreachable: "Synod उपलब्ध नहीं है, इसलिए आवाज़ शुरू नहीं हो सकती। ऐप सर्वर शुरू करें, फिर पुनः प्रयास करें।"
+  },
+  ru: {
+    voice_greeting: "Привет — готовлю голосовой ввод, чтобы первые слова не обрезались.",
+    voice_warming: "Голосовой ввод прогревается. Можно нажать «Говорить»; подготовка продолжится в фоне.",
+    voice_listening_live: "Слушаю и собираю живую расшифровку…",
+    voice_live_transcribing: "Обновляю живую расшифровку…",
+    voice_finalizing: "Финальная проверка Whisper сверяет всю фразу…",
+    voice_waiting_for_voice: "жду ваш голос",
+    voice_pause_detected: "Пауза обнаружена. Завершаю расшифровку…",
+    voice_auto_sending: "Дайте подумать… отправляю расшифровку.",
+    voice_filler_think: "Дайте подумать.",
+    voice_batch_queued: "Голосовой фрагмент записан. Отправлю его, когда Synod будет готов.",
+    voice_batch_sent: "Голосовой фрагмент отправлен в Synod.",
+    voice_batches_sent: "Голосовые фрагменты поставлены в очередь или отправлены. Synod ответит по мере завершения.",
+    voice_batching: "фрагменты",
+    voice_server_unreachable: "Synod недоступен, поэтому голосовой ввод не запускается. Запустите сервер приложения и повторите."
+  },
+  nl: {
+    voice_greeting: "Hoi — ik zet spraak klaar zodat je eerste woorden niet worden afgekapt.",
+    voice_warming: "Spraak wordt opgewarmd. Je kunt nu op Praten drukken; ik blijf voorbereiden op de achtergrond.",
+    voice_listening_live: "Ik luister en bouw een live transcript…",
+    voice_live_transcribing: "Live transcript bijwerken…",
+    voice_finalizing: "Laatste Whisper-controle bekijkt de hele zin…",
+    voice_waiting_for_voice: "wachten op je stem",
+    voice_pause_detected: "Pauze gedetecteerd. Transcript afronden…",
+    voice_auto_sending: "Laat me dit doordenken… je transcript wordt verzonden.",
+    voice_filler_think: "Laat me dit doordenken.",
+    voice_batch_queued: "Spraakbatch vastgelegd. Ik verstuur die zodra Synod klaar is.",
+    voice_batch_sent: "Spraakbatch naar Synod verzonden.",
+    voice_batches_sent: "Spraakbatches staan in de wachtrij of zijn verzonden. Synod antwoordt zodra ze klaar zijn.",
+    voice_batching: "batches",
+    voice_server_unreachable: "Synod is niet bereikbaar, dus spraak kan niet starten. Start de appserver en probeer opnieuw."
+  },
+  ar: {
+    voice_greeting: "مرحبًا — أجهّز الإدخال الصوتي حتى لا تُقتطع كلماتك الأولى.",
+    voice_warming: "يجري تجهيز الصوت. يمكنك الضغط على «تحدث» الآن؛ سأواصل التحضير في الخلفية.",
+    voice_listening_live: "أستمع وأبني النص المباشر…",
+    voice_live_transcribing: "جارٍ تحديث النص المباشر…",
+    voice_finalizing: "تتحقق مرحلة Whisper النهائية من الجملة كاملة…",
+    voice_waiting_for_voice: "بانتظار صوتك",
+    voice_pause_detected: "تم اكتشاف توقف. جارٍ إنهاء النص…",
+    voice_auto_sending: "دعني أفكر في هذا… جارٍ إرسال النص.",
+    voice_filler_think: "دعني أفكر في هذا.",
+    voice_batch_queued: "تم التقاط دفعة صوتية. سأرسلها عندما يكون سينود جاهزًا.",
+    voice_batch_sent: "أُرسلت الدفعة الصوتية إلى سينود.",
+    voice_batches_sent: "الدفعات الصوتية في قائمة الانتظار أو أُرسلت. سيرد سينود عند اكتمالها.",
+    voice_batching: "دفعات",
+    voice_server_unreachable: "سينود غير متاح، لذلك لا يمكن بدء الصوت. شغّل خادم التطبيق ثم أعد المحاولة."
+  },
+  es: {
+    voice_greeting: "Hola: estoy preparando la voz para que tus primeras palabras no se corten.",
+    voice_warming: "La voz se está preparando. Puedes pulsar Hablar ahora; seguiré preparando en segundo plano.",
+    voice_listening_live: "Escuchando y creando una transcripción en vivo…",
+    voice_live_transcribing: "Actualizando la transcripción en vivo…",
+    voice_finalizing: "La pasada final de Whisper revisa toda la frase…",
+    voice_waiting_for_voice: "esperando tu voz",
+    voice_pause_detected: "Pausa detectada. Finalizando tu transcripción…",
+    voice_auto_sending: "Déjame pensarlo bien… enviando tu transcripción.",
+    voice_filler_think: "Déjame pensarlo bien.",
+    voice_batch_queued: "Lote de voz capturado. Lo enviaré en cuanto Synod esté listo.",
+    voice_batch_sent: "Lote de voz enviado a Synod.",
+    voice_batches_sent: "Los lotes de voz están en cola o enviados. Synod responderá cuando terminen.",
+    voice_batching: "lotes",
+    voice_server_unreachable: "Synod no está accesible, así que la voz no puede iniciar. Inicia el servidor de la app y reintenta."
+  },
+  de: {
+    voice_greeting: "Hallo — ich bereite die Spracheingabe vor, damit deine ersten Wörter nicht abgeschnitten werden.",
+    voice_warming: "Sprache wird vorbereitet. Du kannst jetzt Sprechen drücken; ich wärme im Hintergrund weiter auf.",
+    voice_listening_live: "Ich höre zu und erstelle ein Live-Transkript…",
+    voice_live_transcribing: "Live-Transkript wird aktualisiert…",
+    voice_finalizing: "Der finale Whisper-Durchlauf prüft den ganzen Satz…",
+    voice_waiting_for_voice: "warte auf deine Stimme",
+    voice_pause_detected: "Pause erkannt. Transkript wird finalisiert…",
+    voice_auto_sending: "Ich denke das kurz durch… dein Transkript wird gesendet.",
+    voice_filler_think: "Ich denke das kurz durch.",
+    voice_batch_queued: "Sprachabschnitt erfasst. Ich sende ihn, sobald Synod bereit ist.",
+    voice_batch_sent: "Sprachabschnitt an Synod gesendet.",
+    voice_batches_sent: "Sprachabschnitte sind in der Warteschlange oder gesendet. Synod antwortet, sobald sie fertig sind.",
+    voice_batching: "Abschnitte",
+    voice_server_unreachable: "Synod ist nicht erreichbar, daher kann Sprache nicht starten. Starte den App-Server und versuche es erneut."
+  }
+};
+Object.entries(voiceFlowTranslations).forEach(([lang, values]) => Object.assign(enhancementTranslations[lang], values));
+
+Object.entries(enhancementTranslations).forEach(([lang, values]) => Object.assign(translations[lang], values));
+
 let currentLang = "en";
 
 export function setLanguage(lang) {
@@ -409,6 +562,12 @@ export function setLanguage(lang) {
         }
       }
     });
+    document.querySelectorAll("[data-i18n-placeholder]").forEach((el) => {
+      el.placeholder = translations[currentLang][el.dataset.i18nPlaceholder] || translations.en[el.dataset.i18nPlaceholder] || el.placeholder;
+    });
+    document.querySelectorAll("[data-i18n-aria-label]").forEach((el) => {
+      el.setAttribute("aria-label", translations[currentLang][el.dataset.i18nAriaLabel] || translations.en[el.dataset.i18nAriaLabel] || el.getAttribute("aria-label"));
+    });
 
     return true;
   }
@@ -416,7 +575,7 @@ export function setLanguage(lang) {
 }
 
 export function t(key) {
-  return translations[currentLang][key] || key;
+  return translations[currentLang][key] || translations.en[key] || key;
 }
 
 export function getCurrentLang() {

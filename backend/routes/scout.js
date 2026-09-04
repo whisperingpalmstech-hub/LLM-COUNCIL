@@ -1,12 +1,16 @@
 import express from "express";
-import { execSync } from "node:child_process";
+import { execFile } from "node:child_process";
+import { promisify } from "node:util";
 import { existsSync, readFileSync, readdirSync, statSync } from "node:fs";
 import { mkdtempSync, rmSync } from "node:fs";
-import { join, basename } from "node:path";
+import { join } from "node:path";
 import { tmpdir } from "node:os";
+
+const execFileAsync = promisify(execFile);
 
 export function createScoutRouter() {
   const router = express.Router();
+  let activeAnalyses = 0;
 
   router.post("/analyze", async (req, res) => {
     const { url } = req.body;
@@ -14,33 +18,60 @@ export function createScoutRouter() {
 
     let parsed;
     try { parsed = new URL(url); } catch { return res.status(400).json({ success: false, error: "Invalid URL" }); }
-    if (!parsed.hostname.includes("github.com")) {
-      return res.status(400).json({ success: false, error: "Only github.com URLs are supported" });
+    if (parsed.protocol !== "https:" || parsed.hostname.toLowerCase() !== "github.com" || parsed.username || parsed.password) {
+      return res.status(400).json({ success: false, error: "Use a public HTTPS github.com repository URL." });
     }
 
-    const repoName = basename(parsed.pathname).replace(/\.git$/, "") || "repo";
-    const tmpDir = mkdtempSync(join(tmpdir(), "synod-scout-"));
-    console.log(`[Scout] Cloning ${url} → ${tmpDir}`);
+    const pathParts = parsed.pathname.replace(/\.git\/?$/, "").split("/").filter(Boolean);
+    if (pathParts.length !== 2 || !pathParts.every((part) => /^[a-z0-9_.-]+$/i.test(part))) {
+      return res.status(400).json({ success: false, error: "Use the repository root URL in the form https://github.com/owner/repository." });
+    }
+
+    const canonicalUrl = `https://github.com/${pathParts[0]}/${pathParts[1]}.git`;
+    if (activeAnalyses >= 2) {
+      return res.status(429).json({ success: false, code: "SCOUT_BUSY", error: "Scout is already analyzing two repositories. Try again shortly." });
+    }
+    const repoName = pathParts[1];
+    let tmpDir;
+    try { tmpDir = mkdtempSync(join(tmpdir(), "synod-scout-")); }
+    catch { return res.status(503).json({ success: false, code: "SCOUT_STORAGE_UNAVAILABLE", error: "Scout could not allocate temporary analysis storage." }); }
+    activeAnalyses += 1;
+    console.log(`[Scout] Cloning ${canonicalUrl} → ${tmpDir}`);
 
     try {
-      execSync(`git clone --depth 1 --single-branch "${url}" "${tmpDir}"`, {
+      await execFileAsync("git", ["clone", "--depth", "1", "--single-branch", "--no-tags", "--filter=blob:none", canonicalUrl, tmpDir], {
         timeout: 60_000,
-        stdio: "pipe",
+        maxBuffer: 1024 * 1024,
       });
     } catch (e) {
       rmSync(tmpDir, { recursive: true, force: true });
-      const msg = (e.stderr || e.message || "").toString().slice(0, 300);
-      return res.status(422).json({ success: false, error: `Clone failed: ${msg}` });
+      activeAnalyses -= 1;
+      const detail = scoutCloneError(e);
+      return res.status(422).json({ success: false, code: "SCOUT_CLONE_FAILED", error: detail });
     }
 
-    const report = analyzeProject(tmpDir, url, repoName);
-    rmSync(tmpDir, { recursive: true, force: true });
-    console.log(`[Scout] Analysis complete for ${repoName}`);
-
-    return res.json({ success: true, ...report });
+    try {
+      const report = analyzeProject(tmpDir, canonicalUrl.replace(/\.git$/, ""), repoName);
+      console.log(`[Scout] Analysis complete for ${repoName}`);
+      return res.json({ success: true, ...report });
+    } catch (error) {
+      console.error(`[Scout] Analysis failed for ${repoName}:`, error.message);
+      return res.status(500).json({ success: false, code: "SCOUT_ANALYSIS_FAILED", error: "The repository was cloned, but its structure could not be analyzed safely." });
+    } finally {
+      rmSync(tmpDir, { recursive: true, force: true });
+      activeAnalyses -= 1;
+    }
   });
 
   return router;
+}
+
+function scoutCloneError(error) {
+  const raw = String(error?.stderr || error?.message || "").toLowerCase();
+  if (error?.killed || error?.signal === "SIGTERM" || /timed out|timeout/.test(raw)) return "Repository cloning timed out. Try a smaller public repository.";
+  if (/not found|repository not found|authentication/.test(raw)) return "Repository not found or not publicly accessible.";
+  if (/could not resolve|failed to connect|network|connection/.test(raw)) return "GitHub could not be reached from the server. Check outbound network access and try again.";
+  return "GitHub could not clone this repository. Confirm that the URL is public and points to the repository root.";
 }
 
 function analyzeProject(dir, url, repoName) {
@@ -199,16 +230,33 @@ function countTests(dir) {
 }
 
 function estimateLoc(dir) {
-  try {
-    const result = execSync(
-      `find "${dir}" -type f \\( -name '*.js' -o -name '*.ts' -o -name '*.jsx' -o -name '*.tsx' -o -name '*.py' -o -name '*.go' -o -name '*.rs' -o -name '*.css' -o -name '*.html' \\) -not -path '*/.git/*' -not -path '*/node_modules/*' -not -path '*/__pycache__/*' -not -path '*/target/*' | xargs wc -l 2>/dev/null | tail -1`,
-      { timeout: 15_000, encoding: "utf-8" }
-    ).trim();
-    const match = result.match(/^\s*(\d+)/);
-    return match ? `${parseInt(match[1]).toLocaleString()} lines` : "Unknown";
-  } catch {
-    return "Unknown";
+  const sourceExtensions = new Set(["js", "ts", "jsx", "tsx", "py", "go", "rs", "css", "html"]);
+  let lines = 0;
+  let inspectedFiles = 0;
+  let inspectedBytes = 0;
+  const maxFiles = 20_000;
+  const maxBytes = 100 * 1024 * 1024;
+
+  function walk(current) {
+    if (inspectedFiles >= maxFiles || inspectedBytes >= maxBytes) return;
+    let entries;
+    try { entries = readdirSync(current); } catch { return; }
+    for (const entry of entries) {
+      if ([".git", "node_modules", "__pycache__", "target"].includes(entry)) continue;
+      const filename = join(current, entry);
+      let stats;
+      try { stats = statSync(filename); } catch { continue; }
+      if (stats.isDirectory()) { walk(filename); continue; }
+      if (!sourceExtensions.has(entry.split(".").pop()?.toLowerCase()) || stats.size > 2 * 1024 * 1024) continue;
+      inspectedFiles += 1;
+      inspectedBytes += stats.size;
+      try { lines += readFileSync(filename, "utf8").split(/\r?\n/).length; } catch {}
+      if (inspectedFiles >= maxFiles || inspectedBytes >= maxBytes) break;
+    }
   }
+
+  walk(dir);
+  return lines ? `${lines.toLocaleString()} lines${inspectedFiles >= maxFiles || inspectedBytes >= maxBytes ? "+" : ""}` : "Unknown";
 }
 
 function getStructure(dir) {
@@ -238,15 +286,7 @@ function findGaps(dir) {
     gaps.push("No README found");
   }
 
-  const hasTestFiles = (() => {
-    try {
-      const result = execSync(
-        `find "${dir}" -maxdepth 3 -type f \\( -name '*.test.*' -o -name '*_test.*' -o -name '*.spec.*' \\) -not -path '*/.git/*' -not -path '*/node_modules/*' 2>/dev/null | head -1`,
-        { timeout: 5_000, encoding: "utf-8" }
-      );
-      return result.trim().length > 0;
-    } catch { return false; }
-  })();
+  const hasTestFiles = hasMatchingFile(dir, (entry) => /(?:\.test\.|_test\.|\.spec\.)/i.test(entry), 3);
 
   if (!hasTestFiles && !existsSync(join(dir, "tests")) && !existsSync(join(dir, "test")) && !existsSync(join(dir, "__tests__"))) {
     gaps.push("No tests detected");
@@ -281,6 +321,21 @@ function findGaps(dir) {
   }
 
   return gaps;
+}
+
+function hasMatchingFile(dir, predicate, maxDepth, depth = 0) {
+  if (depth > maxDepth) return false;
+  let entries;
+  try { entries = readdirSync(dir); } catch { return false; }
+  for (const entry of entries) {
+    if ([".git", "node_modules", "__pycache__", "target"].includes(entry)) continue;
+    const filename = join(dir, entry);
+    let stats;
+    try { stats = statSync(filename); } catch { continue; }
+    if (stats.isFile() && predicate(entry)) return true;
+    if (stats.isDirectory() && hasMatchingFile(filename, predicate, maxDepth, depth + 1)) return true;
+  }
+  return false;
 }
 
 function countDependencies(dir, packageJsonPath) {

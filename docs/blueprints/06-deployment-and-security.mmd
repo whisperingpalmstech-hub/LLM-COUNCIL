@@ -1,0 +1,11 @@
+flowchart LR
+  User[Users] --> TLS[HTTPS reverse proxy]
+  TLS --> Auth[Basic Auth]
+  TLS --> Health[Public health endpoint]
+  Auth --> Synod[Synod service]
+  Secrets[Protected .env / secret manager] --> Synod
+  Synod --> Data[(Persistent data)]
+  Synod --> Providers[Model providers]
+  Synod --> Anything[AnythingLLM]
+  Backups[Tested backups] --> Data
+  Logs[Logs and health monitoring] --> Synod

@@ -1,0 +1,13 @@
+stateDiagram-v2
+  [*] --> Frame
+  Frame --> Created: direct decision
+  Frame --> Interview: guided follow-ups
+  Interview --> Interview: clarify
+  Interview --> Created: sufficient context
+  Created --> Deliberating
+  Deliberating --> Verdict
+  Verdict --> Completed
+  Verdict --> Failed
+  Completed --> Memory: write decision note
+  Memory --> [*]
+  Failed --> [*]
