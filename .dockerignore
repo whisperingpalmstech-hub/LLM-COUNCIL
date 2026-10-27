@@ -1,26 +1,14 @@
-# Secrets — never in the image
 .env
 .env.*
-.env.bak
-.env.bak*
 *.pem
 *.key
 *.crt
 *.p12
-
-# Runtime artifacts
 *.log
 data/
-
-# Dev dependencies
+vendor/
 node_modules/
+**/node_modules/
+**/dist/
 .git/
-.cache/
-
-# OS cruft
 .DS_Store
-Thumbs.db
-
-# Tests
-tests/
-coverage/

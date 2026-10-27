@@ -1,0 +1,48 @@
+import { fetchJson } from "./http.ts";
+import type { CompletionRequest, Provider } from "./types.ts";
+
+export class AnthropicProvider implements Provider {
+  readonly id = "anthropic" as const;
+  private readonly apiKey: string | undefined;
+  private readonly model: string;
+  private readonly maxTokens: number;
+  private readonly timeoutMs: number;
+
+  constructor(options: { apiKey?: string; model: string; maxTokens: number; timeoutMs: number }) {
+    this.apiKey = options.apiKey;
+    this.model = options.model;
+    this.maxTokens = options.maxTokens;
+    this.timeoutMs = options.timeoutMs;
+  }
+
+  configured(): boolean {
+    return Boolean(this.apiKey);
+  }
+
+  defaultModel(): string {
+    return this.model;
+  }
+
+  async complete(request: CompletionRequest): Promise<string> {
+    const system = [request.system, request.json ? "Respond with exactly one valid JSON object and nothing else." : ""]
+      .filter(Boolean)
+      .join("\n\n");
+    const data = await fetchJson("https://api.anthropic.com/v1/messages", {
+      label: "anthropic",
+      timeoutMs: this.timeoutMs,
+      signal: request.signal,
+      headers: { "x-api-key": this.apiKey ?? "", "anthropic-version": "2023-06-01" },
+      body: {
+        model: request.model || this.model,
+        max_tokens: this.maxTokens,
+        ...(system ? { system } : {}),
+        messages: request.messages
+      }
+    });
+    return (data.content ?? [])
+      .filter((block: { type: string }) => block.type === "text")
+      .map((block: { text: string }) => block.text)
+      .join("\n")
+      .trim();
+  }
+}

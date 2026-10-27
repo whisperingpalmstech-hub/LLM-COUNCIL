@@ -20,11 +20,12 @@ Synod is a decision-intelligence workspace rather than a generic chatbot. Its di
 
 ## Operating Context
 
-Users begin with a decision prompt and optional file or public GitHub repository. They may select a council mode and number of rounds, answer a pre-session interview, monitor deliberation progress, review the final verdict and execution plan, inspect prior sessions, configure providers, and manage reusable councils.
+Users start a conversation with a question or decision, optionally attaching files (from desktop or phone) or dictating by voice. They answer a clarifying question when asked, watch the council answer and peer-review live, read the chairman's synthesis and execution plan, revisit past conversations, and configure which models sit on the council.
 
 ## Capabilities and Constraints
 
-- Preserve the current session, interview, deliberation, verdict, history, council, settings, voice, attachment, and GitHub Scout workflows.
+- Core flow: optional clarifying question → independent answers → anonymized peer ranking → chairman synthesis → execution plan.
+- Supporting workflows: conversation history, council settings, voice input, file and phone attachments, Obsidian notes, Hermes hand-off.
 - Provider failures must degrade gracefully and must never make the product appear frozen.
 - Structured decision sections replace raw provider payloads in the primary experience.
 - The interface must remain responsive from mobile through wide desktop displays.
