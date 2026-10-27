@@ -5,7 +5,7 @@ import path from "node:path";
 import { test } from "node:test";
 import type { CouncilConfig } from "@synod/contracts";
 import { CouncilEngine } from "../src/council/engine.ts";
-import { normalizePlan, extractJson } from "../src/council/plan.ts";
+import { extractJson, normalizeBrief } from "../src/council/brief.ts";
 import { aggregateRankings, assignLabels, parseRanking } from "../src/council/ranking.ts";
 import { openDatabase, Settings } from "../src/db/database.ts";
 import { EventStore } from "../src/events/store.ts";
@@ -45,7 +45,7 @@ const council = (overrides: Partial<CouncilConfig> = {}): CouncilConfig => ({
   ],
   chairman: { id: "chair", label: "Chair", provider: "mock", model: "chair" },
   clarify: false,
-  executionPlan: true,
+  brief: true,
   webSearch: false,
   ...overrides
 });
@@ -70,13 +70,18 @@ test("aggregateRankings averages positions and sorts best first", () => {
   assert.deepEqual(result.labelToMemberId, { "Response A": "x", "Response B": "y" });
 });
 
-test("normalizePlan fills gaps and never authorizes execution", () => {
-  const plan = normalizePlan(extractJson('Sure!\n```json\n{"decision":"go","phases":["Pilot it"],"confidence":80}\n```'), 3);
-  assert.equal(plan.decision, "GO");
-  assert.equal(plan.confidence, 0.8);
-  assert.equal(plan.phases[0].tasks[0], "Pilot it");
-  assert.equal(plan.version, 3);
-  assert.equal(plan.executionAuthorized, false);
+test("normalizeBrief keeps the mode's sections in order and drops empty ones", () => {
+  const brief = normalizeBrief(
+    extractJson('Sure!\n```json\n{"verdict":"Likely pneumonia","confidence":80,"sections":[{"title":"Recommended workup","items":["Chest X-ray"]},{"title":"Differential diagnosis","items":[{"text":"CAP","level":"HIGH"}]}],"nextSteps":["Start antibiotics"]}\n```'),
+    "medical",
+    3
+  );
+  assert.equal(brief.confidence, 0.8);
+  assert.deepEqual(brief.sections.map((s) => s.title), ["Differential diagnosis", "Recommended workup"]);
+  assert.equal(brief.sections[0].items[0].level, "high");
+  assert.equal(brief.nextSteps[0].urgency, "soon");
+  assert.match(brief.caveats[0], /clinical judgment/);
+  assert.equal(brief.version, 3);
 });
 
 test("a full turn runs all three stages and a plan, recorded as events", async () => {
@@ -96,8 +101,9 @@ test("a full turn runs all three stages and a plan, recorded as events", async (
   assert.ok(turn.stage2.every((r) => r.ranking.length === 3));
   assert.equal(turn.aggregate?.rankings.length, 3);
   assert.match(turn.synthesis?.text ?? "", /synthesis/i);
-  assert.equal(turn.plan?.version, 1);
-  assert.equal(turn.plan?.decision, "CONDITIONAL GO");
+  assert.equal(turn.brief?.version, 1);
+  assert.equal(turn.brief?.mode, "general");
+  assert.deepEqual(turn.brief?.sections.map((s) => s.title), ["Options considered", "Key risks"]);
 });
 
 test("clarify pauses the turn until the user answers, and the answer reaches the council", async () => {
@@ -159,7 +165,7 @@ test("the projection rebuilt from the database matches the live one; interrupted
   const id = first.engine.createConversation("Replay");
   first.engine.sendMessage(id, "A long enough question to be answered straight away by the mock council.");
   await first.engine.idle();
-  first.store.append({ type: "turn.started", conversationId: id, turnId: "stuck", prompt: "stuck", council: council() });
+  first.store.append({ type: "turn.started", conversationId: id, turnId: "stuck", prompt: "stuck", mode: "general", council: council() });
   const live = first.store.require(id);
   first.db.close();
 
@@ -249,4 +255,15 @@ test("follow-up turns see earlier clarifying answers", async () => {
   await engine.idle();
   const turns = store.require(id).turns;
   assert.match(buildContext(turns[1], turns.slice(0, 1)).history, /12-person B2B SaaS/);
+});
+
+test("a medical case uses the medical council and brief sections", async () => {
+  const { engine, store } = setup();
+  engine.saveCouncil(council());
+  const id = engine.createConversation(undefined, "medical");
+  engine.sendMessage(id, "58M, 3 days of fever, productive cough, right basal crackles, SpO2 93% on air. CRP 140.");
+  await engine.idle();
+  const turn = store.require(id).turns[0];
+  assert.equal(turn.mode, "medical");
+  assert.deepEqual(turn.brief?.sections.map((s) => s.title), ["Differential diagnosis", "Can't-miss diagnoses", "Recommended workup"]);
 });

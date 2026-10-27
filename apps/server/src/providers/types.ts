@@ -1,6 +1,6 @@
 import type { ProviderId } from "@synod/contracts";
 
-export type CompletionPurpose = "clarify" | "answer" | "review" | "synthesis" | "plan";
+export type CompletionPurpose = "clarify" | "answer" | "review" | "synthesis" | "brief";
 
 export interface ChatMessage {
   role: "user" | "assistant";

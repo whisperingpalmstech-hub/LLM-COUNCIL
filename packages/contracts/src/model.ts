@@ -14,6 +14,10 @@ export const PROVIDER_IDS = [
 ] as const;
 export type ProviderId = (typeof PROVIDER_IDS)[number];
 
+export const CASE_MODES = ["medical", "legal", "code", "general"] as const;
+/** Shapes how the council reasons and what the brief contains. */
+export type CaseMode = (typeof CASE_MODES)[number];
+
 /** One seat on the council. For `anythingllm`, `model` is the workspace slug. */
 export interface CouncilMember {
   id: string;
@@ -28,8 +32,8 @@ export interface CouncilConfig {
   chairman: CouncilMember;
   /** Ask one clarifying question before deliberating when material context is missing. */
   clarify: boolean;
-  /** Produce a structured execution plan after the synthesis. */
-  executionPlan: boolean;
+  /** Produce a structured second-opinion brief after the synthesis. */
+  brief: boolean;
   /** Pull web search results into the prompt when a search key is configured. */
   webSearch: boolean;
 }
@@ -90,30 +94,41 @@ export interface Synthesis {
   error?: string;
 }
 
-export interface PlanPhase {
-  order: number;
-  name: string;
-  objective: string;
-  duration: string;
-  owner: string;
-  tasks: string[];
-  acceptanceCriteria: string[];
-  decisionGate: string;
+export interface BriefItem {
+  text: string;
+  detail?: string;
+  /** Likelihood, severity, or strength depending on the section. */
+  level?: "high" | "medium" | "low";
 }
 
-export interface ExecutionPlan {
+export interface BriefSection {
+  title: string;
+  items: BriefItem[];
+}
+
+export interface NextStep {
+  action: string;
+  why: string;
+  urgency: "now" | "soon" | "later";
+}
+
+/** The structured second opinion distilled from the council's work. */
+export interface Brief {
   version: number;
-  decision: string;
-  summary: string;
-  assumptions: string[];
-  risks: string[];
-  phases: PlanPhase[];
-  successMetrics: string[];
-  openQuestions: string[];
-  dissent: string[];
+  mode: CaseMode;
+  /** One or two sentences: the answer. */
+  bottomLine: string;
+  /** Short label, e.g. "Likely community-acquired pneumonia", "Strong claim", "Do not merge". */
+  verdict: string;
   confidence: number;
-  /** Plans are preparation artifacts; nothing is executed without an explicit hand-off. */
-  executionAuthorized: false;
+  consensus: string[];
+  disagreements: { point: string; positions: string[] }[];
+  redFlags: string[];
+  /** Mode-specific sections (differential, legal issues, bugs & risks, ...). */
+  sections: BriefSection[];
+  nextSteps: NextStep[];
+  openQuestions: string[];
+  caveats: string[];
 }
 
 export interface HandoffResult {
@@ -123,16 +138,19 @@ export interface HandoffResult {
   at: string;
 }
 
-export type TurnStage = "clarify" | "research" | "stage1" | "stage2" | "stage3" | "plan";
+export type TurnStage = "clarify" | "research" | "stage1" | "stage2" | "stage3" | "brief";
 
 export type TurnStatus = "running" | "awaiting_clarification" | "completed" | "failed";
 
 export interface Turn {
   id: string;
   prompt: string;
+  mode: CaseMode;
   attachments: Attachment[];
   status: TurnStatus;
   stage: TurnStage | null;
+  /** When the current stage started (drives live timers). */
+  stageStartedAt?: string;
   council: CouncilConfig;
   clarification?: { question: string; answer?: string };
   research: SearchResult[];
@@ -140,7 +158,7 @@ export interface Turn {
   stage2: Stage2Review[];
   aggregate?: Stage2Aggregate;
   synthesis?: Synthesis;
-  plan?: ExecutionPlan;
+  brief?: Brief;
   handoff?: HandoffResult;
   error?: string;
   startedAt: string;
@@ -150,6 +168,7 @@ export interface Turn {
 export interface Conversation {
   id: string;
   title: string;
+  mode: CaseMode;
   archived: boolean;
   createdAt: string;
   updatedAt: string;
@@ -163,6 +182,7 @@ export interface Conversation {
 export interface ConversationSummary {
   id: string;
   title: string;
+  mode: CaseMode;
   archived: boolean;
   updatedAt: string;
   turnCount: number;

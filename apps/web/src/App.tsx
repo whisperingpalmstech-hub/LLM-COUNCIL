@@ -1,8 +1,10 @@
 import { useEffect, useState } from "react";
 import type { ServerInfo } from "@synod/contracts";
-import { ConversationView } from "./components/ConversationView";
-import { CouncilSettings } from "./components/CouncilSettings";
+import { CaseView } from "./components/case/CaseView";
+import { CommandPalette } from "./components/CommandPalette";
 import { MobileUpload } from "./components/MobileUpload";
+import { NewCase } from "./components/NewCase";
+import { SettingsDialog } from "./components/SettingsDialog";
 import { Sidebar } from "./components/Sidebar";
 import { api } from "./lib/api";
 import { navigate, useRoute } from "./lib/router";
@@ -11,35 +13,50 @@ export function App() {
   const route = useRoute();
   const [info, setInfo] = useState<ServerInfo | null>(null);
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [paletteOpen, setPaletteOpen] = useState(false);
+  const [sidebarOpen, setSidebarOpen] = useState(false);
 
   useEffect(() => {
     api.info().then(setInfo).catch(() => undefined);
   }, []);
 
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      const mod = e.metaKey || e.ctrlKey;
+      if (mod && e.key.toLowerCase() === "k") {
+        e.preventDefault();
+        setPaletteOpen((v) => !v);
+      } else if (mod && e.shiftKey && e.key.toLowerCase() === "o") {
+        e.preventDefault();
+        navigate("/");
+      }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, []);
+
+  useEffect(() => setSidebarOpen(false), [route]);
+
   if (route.name === "mobile") return <MobileUpload conversationId={route.id} />;
 
-  const startConversation = async () => {
-    const conversation = await api.createConversation();
-    navigate(`/c/${conversation.id}`);
-  };
-
   return (
-    <div className="app">
-      <Sidebar activeId={route.name === "conversation" ? route.id : null} onNew={startConversation} onSettings={() => setSettingsOpen(true)} />
-      <main className="main">
+    <div className="flex h-dvh overflow-hidden">
+      <Sidebar
+        activeId={route.name === "conversation" ? route.id : null}
+        open={sidebarOpen}
+        onClose={() => setSidebarOpen(false)}
+        onSettings={() => setSettingsOpen(true)}
+        onSearch={() => setPaletteOpen(true)}
+      />
+      <main className="flex min-w-0 flex-1 flex-col">
         {route.name === "conversation" ? (
-          <ConversationView key={route.id} id={route.id} info={info} />
+          <CaseView key={route.id} id={route.id} info={info} onOpenSidebar={() => setSidebarOpen(true)} />
         ) : (
-          <div className="empty-state">
-            <h1>Synod</h1>
-            <p>Ask a question. Several models answer it on their own, review each other's answers anonymously, and a chairman turns that into one answer and a plan.</p>
-            <button className="primary" onClick={startConversation}>
-              New conversation
-            </button>
-          </div>
+          <NewCase info={info} onOpenSidebar={() => setSidebarOpen(true)} />
         )}
       </main>
-      {settingsOpen && <CouncilSettings info={info} onClose={() => setSettingsOpen(false)} />}
+      <SettingsDialog open={settingsOpen} onOpenChange={setSettingsOpen} info={info} />
+      <CommandPalette open={paletteOpen} onOpenChange={setPaletteOpen} onSettings={() => setSettingsOpen(true)} />
     </div>
   );
 }

@@ -4,6 +4,7 @@ import path from "node:path";
 import express, { type NextFunction, type Request, type Response } from "express";
 import type {
   AnswerClarificationRequest,
+  CaseMode,
   CouncilConfig,
   CreateConversationRequest,
   SendMessageRequest,
@@ -12,7 +13,7 @@ import type {
 } from "@synod/contracts";
 import type { Config } from "../config.ts";
 import type { CouncilEngine } from "../council/engine.ts";
-import { planMarkdown } from "../council/plan.ts";
+import { briefMarkdown } from "../council/brief.ts";
 import type { EventStore } from "../events/store.ts";
 import { saveAttachment } from "../integrations/attachments.ts";
 import { handOffToHermes } from "../integrations/hermes.ts";
@@ -73,13 +74,15 @@ export function createApp({ config, store, engine, providers, search, transcribe
 
   api.get("/conversations", (_req, res) => res.json(store.summaries()));
   api.post("/conversations", (req, res) => {
-    const id = engine.createConversation((req.body as CreateConversationRequest)?.title);
+    const body = req.body as CreateConversationRequest;
+    const id = engine.createConversation(body?.title, body?.mode);
     res.status(201).json(store.require(id));
   });
   api.get("/conversations/:id", (req, res) => res.json(store.require(req.params.id)));
   api.patch("/conversations/:id", (req, res) => {
     const conversation = store.require(req.params.id);
-    const { title, archived } = req.body as { title?: string; archived?: boolean };
+    const { title, archived, mode } = req.body as { title?: string; archived?: boolean; mode?: CaseMode };
+    if (mode) engine.setMode(conversation.id, mode);
     if (typeof title === "string" && title.trim() && title.trim() !== conversation.title) {
       store.append({ type: "conversation.renamed", conversationId: conversation.id, title: title.trim().slice(0, 120) });
     }
@@ -117,12 +120,12 @@ export function createApp({ config, store, engine, providers, search, transcribe
     res.status(201).json(attachment);
   });
 
-  api.get("/conversations/:id/turns/:turnId/plan.md", (req, res) => {
+  api.get("/conversations/:id/turns/:turnId/brief.md", (req, res) => {
     const conversation = store.require(req.params.id);
     const turn = conversation.turns.find((t) => t.id === req.params.turnId);
-    if (!turn?.plan) throw Object.assign(new Error("Execution plan not found."), { status: 404 });
-    res.type("text/markdown").setHeader("Content-Disposition", `attachment; filename="synod-plan-v${turn.plan.version}.md"`);
-    res.send(planMarkdown(turn.plan, turn.prompt.split("\n")[0].slice(0, 120)));
+    if (!turn?.brief) throw Object.assign(new Error("Brief not found."), { status: 404 });
+    res.type("text/markdown").setHeader("Content-Disposition", `attachment; filename="synod-second-opinion-v${turn.brief.version}.md"`);
+    res.send(briefMarkdown(turn.brief, turn.prompt));
   });
 
   api.post("/conversations/:id/turns/:turnId/handoff", async (req, res) => {
@@ -130,7 +133,7 @@ export function createApp({ config, store, engine, providers, search, transcribe
     const turn = conversation.turns.find((t) => t.id === req.params.turnId);
     if (!turn) throw Object.assign(new Error("Turn not found."), { status: 404 });
     const result = await handOffToHermes(config.hermes, conversation, turn);
-    store.append({ type: "turn.plan_handed_off", conversationId: conversation.id, turnId: turn.id, result });
+    store.append({ type: "turn.handed_off", conversationId: conversation.id, turnId: turn.id, result });
     res.json(result);
   });
 

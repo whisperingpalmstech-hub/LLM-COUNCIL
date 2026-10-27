@@ -1,13 +1,13 @@
 import crypto from "node:crypto";
-import { PROVIDER_IDS, type CouncilConfig, type CouncilMember, type Stage1Response, type Stage2Review, type Turn } from "@synod/contracts";
+import { CASE_MODES, PROVIDER_IDS, type CaseMode, type CouncilConfig, type CouncilMember, type Stage1Response, type Stage2Review, type Turn } from "@synod/contracts";
 import type { Settings } from "../db/database.ts";
 import type { EventStore } from "../events/store.ts";
 import { writeTurnToVault } from "../integrations/obsidian.ts";
 import type { WebSearch } from "../integrations/search.ts";
 import { errorMessage } from "../providers/http.ts";
 import type { ProviderRegistry } from "../providers/registry.ts";
-import { extractJson, normalizePlan } from "./plan.ts";
-import { ANSWER_SYSTEM, buildContext, clarifyPrompt, planPrompt, questionBlock, reviewPrompt, synthesisPrompt, type TurnContext } from "./prompts.ts";
+import { extractJson, normalizeBrief } from "./brief.ts";
+import { answerSystem, briefPrompt, buildContext, clarifyPrompt, questionBlock, reviewPrompt, synthesisPrompt, type TurnContext } from "./prompts.ts";
 import { aggregateRankings, assignLabels, parseRanking } from "./ranking.ts";
 
 const COUNCIL_SETTING = "council";
@@ -45,9 +45,10 @@ export class CouncilEngine {
 
   council(): CouncilConfig {
     const saved = this.deps.settings.get<CouncilConfig>(COUNCIL_SETTING);
-    if (saved?.members?.length) return saved;
+    // Re-validate so councils saved by older versions pick up new defaults.
+    if (saved?.members?.length) return validateCouncil(saved);
     const { members, chairman } = this.deps.providers.defaultCouncil(this.deps.env);
-    return { members, chairman, clarify: true, executionPlan: true, webSearch: Boolean(this.deps.search.provider()) };
+    return { members, chairman, clarify: true, brief: true, webSearch: Boolean(this.deps.search.provider()) };
   }
 
   saveCouncil(input: CouncilConfig): CouncilConfig {
@@ -58,10 +59,16 @@ export class CouncilEngine {
 
   // ---- commands --------------------------------------------------------------
 
-  createConversation(title?: string): string {
+  createConversation(title?: string, mode: CaseMode = "general"): string {
     const conversationId = crypto.randomUUID();
-    this.deps.store.append({ type: "conversation.created", conversationId, title: cleanTitle(title) || "New conversation" });
+    this.deps.store.append({ type: "conversation.created", conversationId, title: cleanTitle(title) || "New conversation", mode: validMode(mode) });
     return conversationId;
+  }
+
+  setMode(conversationId: string, mode: CaseMode): void {
+    const conversation = this.deps.store.require(conversationId);
+    const next = validMode(mode);
+    if (next !== conversation.mode) this.deps.store.append({ type: "conversation.mode_changed", conversationId, mode: next });
   }
 
   sendMessage(conversationId: string, prompt: string, override?: Partial<CouncilConfig>): string {
@@ -78,7 +85,7 @@ export class CouncilEngine {
     if (!conversation.turns.length && conversation.title === "New conversation") {
       this.deps.store.append({ type: "conversation.renamed", conversationId, title: cleanTitle(text) });
     }
-    this.deps.store.append({ type: "turn.started", conversationId, turnId, prompt: text, council });
+    this.deps.store.append({ type: "turn.started", conversationId, turnId, prompt: text, mode: conversation.mode, council });
     this.launch(conversationId, turnId);
     return turnId;
   }
@@ -149,11 +156,12 @@ export class CouncilEngine {
     };
     let turn = this.turn(conversationId, turnId);
     const { members, chairman } = turn.council;
+    const mode = turn.mode;
 
     // 0. Clarify — pause the turn and wait for the user if one question is essential.
     if (turn.council.clarify && !turn.clarification) {
       stage("clarify");
-      const question = await this.clarifyingQuestion(chairman, context(), signal);
+      const question = await this.clarifyingQuestion(chairman, context(), mode, signal);
       if (signal.aborted) return;
       if (question) {
         emit({ type: "turn.clarification_requested", conversationId, turnId, question });
@@ -184,7 +192,7 @@ export class CouncilEngine {
         const started = Date.now();
         let response: Stage1Response;
         try {
-          const text = await providers.complete(member, { purpose: "answer", system: ANSWER_SYSTEM, messages: [{ role: "user", content: question }], signal: memberSignal });
+          const text = await providers.complete(member, { purpose: "answer", system: answerSystem(mode), messages: [{ role: "user", content: question }], signal: memberSignal });
           response = { memberId: member.id, label: member.label, model: modelName(member), text, ms: Date.now() - started };
         } catch (error) {
           response = { memberId: member.id, label: member.label, model: modelName(member), text: "", error: memberError(error, memberSignal), ms: Date.now() - started };
@@ -249,16 +257,16 @@ export class CouncilEngine {
       emit({ type: "turn.synthesis_completed", conversationId, turnId, synthesis: { memberId: chairman.id, label: chairman.label, model: modelName(chairman), text: synthesisText } });
     }
 
-    // 4. Execution plan.
-    if (turn.council.executionPlan) {
-      stage("plan");
+    // 4. Second-opinion brief.
+    if (turn.council.brief) {
+      stage("brief");
       try {
-        const reply = await providers.complete(chairman, { purpose: "plan", json: true, messages: [{ role: "user", content: planPrompt(context(), synthesisText) }], signal });
-        const version = store.require(conversationId).turns.filter((t) => t.plan).length + 1;
-        emit({ type: "turn.plan_generated", conversationId, turnId, plan: normalizePlan(extractJson(reply), version) });
+        const reply = await providers.complete(chairman, { purpose: "brief", json: true, messages: [{ role: "user", content: briefPrompt(context(), mode, answered, synthesisText) }], signal });
+        const version = store.require(conversationId).turns.filter((t) => t.brief).length + 1;
+        emit({ type: "turn.brief_generated", conversationId, turnId, brief: normalizeBrief(extractJson(reply), mode, version) });
       } catch (error) {
         if (signal.aborted) return;
-        console.warn("[council] plan generation failed:", errorMessage(error));
+        console.warn("[council] brief generation failed:", errorMessage(error));
       }
     }
     if (signal.aborted) return;
@@ -273,9 +281,9 @@ export class CouncilEngine {
     }
   }
 
-  private async clarifyingQuestion(chairman: CouncilMember, ctx: TurnContext, signal: AbortSignal): Promise<string | null> {
+  private async clarifyingQuestion(chairman: CouncilMember, ctx: TurnContext, mode: CaseMode, signal: AbortSignal): Promise<string | null> {
     try {
-      const reply = await this.deps.providers.complete(chairman, { purpose: "clarify", json: true, messages: [{ role: "user", content: clarifyPrompt(ctx) }], signal });
+      const reply = await this.deps.providers.complete(chairman, { purpose: "clarify", json: true, messages: [{ role: "user", content: clarifyPrompt(ctx, mode) }], signal });
       const parsed = extractJson(reply) as { needed?: unknown; question?: unknown };
       const question = typeof parsed.question === "string" ? parsed.question.trim() : "";
       return parsed.needed === true && question ? question.slice(0, 500) : null;
@@ -335,7 +343,7 @@ function validateCouncil(input: CouncilConfig): CouncilConfig {
     members,
     chairman: validateMember(input.chairman),
     clarify: Boolean(input.clarify),
-    executionPlan: Boolean(input.executionPlan),
+    brief: input.brief !== false,
     webSearch: Boolean(input.webSearch)
   };
 }
@@ -347,6 +355,10 @@ function validateMember(m: CouncilMember): CouncilMember {
   if (!id || !label) throw badRequest("Each council member needs an id and a label.");
   if (!PROVIDER_IDS.includes(m.provider)) throw badRequest(`Unknown provider: ${String(m.provider)}`);
   return { id, label, provider: m.provider, model: String(m.model ?? "").trim().slice(0, 200) };
+}
+
+function validMode(mode: unknown): CaseMode {
+  return CASE_MODES.includes(mode as CaseMode) ? (mode as CaseMode) : "general";
 }
 
 function modelName(member: CouncilMember): string {

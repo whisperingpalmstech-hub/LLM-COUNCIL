@@ -66,7 +66,7 @@ export class EventStore {
     return this.all()
       .map((c): ConversationSummary => {
         const last = c.turns.at(-1);
-        return { id: c.id, title: c.title, archived: c.archived, updatedAt: c.updatedAt, turnCount: c.turns.length, status: last?.status ?? "idle" };
+        return { id: c.id, title: c.title, mode: c.mode, archived: c.archived, updatedAt: c.updatedAt, turnCount: c.turns.length, status: last?.status ?? "idle" };
       })
       .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
   }

@@ -3,9 +3,10 @@
 
 import type {
   Attachment,
+  Brief,
+  CaseMode,
   Conversation,
   CouncilConfig,
-  ExecutionPlan,
   HandoffResult,
   SearchResult,
   Stage1Response,
@@ -18,11 +19,12 @@ import type {
 type E<T extends string, P> = { type: T; seq: number; conversationId: string; at: string } & P;
 
 export type ConversationEvent =
-  | E<"conversation.created", { title: string }>
+  | E<"conversation.created", { title: string; mode: CaseMode }>
+  | E<"conversation.mode_changed", { mode: CaseMode }>
   | E<"conversation.renamed", { title: string }>
   | E<"conversation.archived", { archived: boolean }>
   | E<"attachment.added", { attachment: Attachment }>
-  | E<"turn.started", { turnId: string; prompt: string; council: CouncilConfig }>
+  | E<"turn.started", { turnId: string; prompt: string; mode: CaseMode; council: CouncilConfig }>
   | E<"turn.stage_started", { turnId: string; stage: TurnStage }>
   | E<"turn.clarification_requested", { turnId: string; question: string }>
   | E<"turn.clarification_answered", { turnId: string; answer: string }>
@@ -31,8 +33,8 @@ export type ConversationEvent =
   | E<"turn.stage2_review", { turnId: string; review: Stage2Review }>
   | E<"turn.stage2_aggregated", { turnId: string; aggregate: Stage2Aggregate }>
   | E<"turn.synthesis_completed", { turnId: string; synthesis: Synthesis }>
-  | E<"turn.plan_generated", { turnId: string; plan: ExecutionPlan }>
-  | E<"turn.plan_handed_off", { turnId: string; result: HandoffResult }>
+  | E<"turn.brief_generated", { turnId: string; brief: Brief }>
+  | E<"turn.handed_off", { turnId: string; result: HandoffResult }>
   | E<"turn.completed", { turnId: string }>
   | E<"turn.failed", { turnId: string; error: string }>;
 
@@ -44,7 +46,7 @@ export type NewConversationEvent = DistributiveOmit<ConversationEvent, "seq" | "
 export type ServerPush = { type: "event"; event: ConversationEvent };
 
 export function emptyConversation(id: string): Conversation {
-  return { id, title: "", archived: false, createdAt: "", updatedAt: "", pendingAttachments: [], turns: [], seq: 0 };
+  return { id, title: "", mode: "general", archived: false, createdAt: "", updatedAt: "", pendingAttachments: [], turns: [], seq: 0 };
 }
 
 export function applyEvent(state: Conversation, event: ConversationEvent): Conversation {
@@ -61,7 +63,11 @@ export function applyEvent(state: Conversation, event: ConversationEvent): Conve
   switch (event.type) {
     case "conversation.created":
       next.title = event.title;
+      next.mode = event.mode ?? "general"; // cases created before modes existed
       next.createdAt = event.at;
+      break;
+    case "conversation.mode_changed":
+      next.mode = event.mode;
       break;
     case "conversation.renamed":
       next.title = event.title;
@@ -78,6 +84,7 @@ export function applyEvent(state: Conversation, event: ConversationEvent): Conve
         {
           id: event.turnId,
           prompt: event.prompt,
+          mode: event.mode ?? next.mode,
           attachments: next.pendingAttachments,
           status: "running",
           stage: null,
@@ -91,7 +98,7 @@ export function applyEvent(state: Conversation, event: ConversationEvent): Conve
       next.pendingAttachments = [];
       break;
     case "turn.stage_started":
-      patchTurn(() => ({ stage: event.stage, status: "running" }));
+      patchTurn(() => ({ stage: event.stage, stageStartedAt: event.at, status: "running" }));
       break;
     case "turn.clarification_requested":
       patchTurn(() => ({ status: "awaiting_clarification", clarification: { question: event.question } }));
@@ -114,10 +121,10 @@ export function applyEvent(state: Conversation, event: ConversationEvent): Conve
     case "turn.synthesis_completed":
       patchTurn(() => ({ synthesis: event.synthesis }));
       break;
-    case "turn.plan_generated":
-      patchTurn(() => ({ plan: event.plan }));
+    case "turn.brief_generated":
+      patchTurn(() => ({ brief: event.brief }));
       break;
-    case "turn.plan_handed_off":
+    case "turn.handed_off":
       patchTurn(() => ({ handoff: event.result }));
       break;
     case "turn.completed":

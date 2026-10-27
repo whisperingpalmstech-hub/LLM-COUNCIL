@@ -1,5 +1,6 @@
 import type {
   Attachment,
+  CaseMode,
   Conversation,
   ConversationSummary,
   CouncilConfig,
@@ -29,14 +30,14 @@ export const api = {
   saveCouncil: (council: CouncilConfig) => request<CouncilConfig>("/api/council", { method: "PUT", body: JSON.stringify(council) }),
   conversations: () => request<ConversationSummary[]>("/api/conversations"),
   conversation: (id: string) => request<Conversation>(`/api/conversations/${id}`),
-  createConversation: () => post<Conversation>("/api/conversations"),
-  updateConversation: (id: string, patch: { title?: string; archived?: boolean }) =>
+  createConversation: (mode: CaseMode) => post<Conversation>("/api/conversations", { mode }),
+  updateConversation: (id: string, patch: { title?: string; archived?: boolean; mode?: CaseMode }) =>
     request<Conversation>(`/api/conversations/${id}`, { method: "PATCH", body: JSON.stringify(patch) }),
   send: (id: string, prompt: string) => post<{ turnId: string }>(`/api/conversations/${id}/messages`, { prompt }),
   answer: (id: string, answer: string) => post(`/api/conversations/${id}/clarification`, { answer }),
   cancel: (id: string) => post(`/api/conversations/${id}/cancel`),
   handoff: (id: string, turnId: string) => post<HandoffResult>(`/api/conversations/${id}/turns/${turnId}/handoff`),
-  planUrl: (id: string, turnId: string) => `/api/conversations/${id}/turns/${turnId}/plan.md`,
+  briefUrl: (id: string, turnId: string) => `/api/conversations/${id}/turns/${turnId}/brief.md`,
   upload: (id: string, body: UploadAttachmentRequest) => post<Attachment>(`/api/conversations/${id}/attachments`, body),
   transcribe: (audio: Blob, language = "auto") =>
     request<TranscriptionResponse>(`/api/transcribe?language=${encodeURIComponent(language)}`, {

@@ -1,10 +1,11 @@
 // All model-facing prompt text lives here. Stage 2 and 3 follow Karpathy's llm-council.
 
-import type { Attachment, SearchResult, Stage1Response, Stage2Review, Turn } from "@synod/contracts";
+import type { Attachment, CaseMode, SearchResult, Stage1Response, Stage2Review, Turn } from "@synod/contracts";
+import { MODES } from "./modes.ts";
 
-export const ANSWER_SYSTEM =
-  "You are one member of a council of independent AI advisers. Answer the user's question directly and substantively. " +
-  "Be specific, show your reasoning, state key assumptions and risks, and say plainly when you are uncertain. Use Markdown.";
+export function answerSystem(mode: CaseMode): string {
+  return MODES[mode].answerSystem;
+}
 
 export interface TurnContext {
   prompt: string;
@@ -37,11 +38,11 @@ export function questionBlock(ctx: TurnContext): string {
     .join("\n\n");
 }
 
-export function clarifyPrompt(ctx: TurnContext): string {
+export function clarifyPrompt(ctx: TurnContext, mode: CaseMode): string {
   return `${questionBlock(ctx)}
 
 Before a council of advisers answers this, decide whether to ask the user ONE clarifying question.
-Ask when the best answer depends on the user's own situation (who they are, their goals, constraints, budget, timeline, stage, or what success means) and the message and earlier conversation do not say. Advice built on guessed context is generic; one good question makes it specific.
+Ask when the best answer depends on specifics of the user's situation that the message and earlier conversation do not give. In this kind of case that usually means: ${MODES[mode].clarifyFocus}. Advice built on guessed context is generic; one good question makes it specific.
 Do not ask for factual or general-knowledge questions, when the user already gave enough context, or merely to confirm something obvious.
 If you ask, make it a single question that gathers the most decision-relevant context at once.
 Return JSON: {"needed": boolean, "question": string}`;
@@ -100,26 +101,33 @@ Your task as Chairman is to synthesize all of this information into a single, co
 Keep genuine disagreement visible rather than averaging it away. Provide a clear, well-reasoned final answer that represents the council's collective wisdom:`;
 }
 
-export function planPrompt(ctx: TurnContext, synthesis: string): string {
+export function briefPrompt(ctx: TurnContext, mode: CaseMode, answers: Stage1Response[], synthesis: string): string {
+  const def = MODES[mode];
+  const members = answers.map((r) => `${r.label}:\n${truncate(r.text, 2500)}`).join("\n\n");
+  const sections = def.sections.map((s) => `    {"title": ${JSON.stringify(s.title)}, "items": [{"text": string, "detail": string, "level": "high"|"medium"|"low"}]}  // ${s.guidance}`).join(",\n");
   return `${questionBlock(ctx)}
 
-The council's final answer:
+Individual council answers:
+${members}
+
+The chairman's synthesis:
 ${synthesis}
 
-Turn this into an execution plan. Return JSON with exactly these fields:
+Distill all of this into a structured second-opinion brief. Return JSON with exactly these fields:
 {
-  "decision": "GO" | "NO-GO" | "CONDITIONAL GO" | "PIVOT" | "CONTINUE INVESTIGATION",
-  "summary": string,
-  "assumptions": string[],
-  "risks": string[],
-  "phases": [{"name": string, "objective": string, "duration": string, "owner": string, "tasks": string[], "acceptanceCriteria": string[], "decisionGate": string}],
-  "successMetrics": string[],
-  "openQuestions": string[],
-  "dissent": string[],
-  "confidence": number between 0 and 1
+  "verdict": string,            // ${def.verdictHint}; at most 10 words
+  "bottomLine": string,         // 1-2 sentences: the answer a busy professional needs first
+  "confidence": number,         // 0-1, the council's overall confidence
+  "redFlags": string[],         // urgent or dangerous issues needing attention now; [] if none
+  "sections": [
+${sections}
+  ],
+  "nextSteps": [{"action": string, "why": string, "urgency": "now"|"soon"|"later"}],
+  "consensus": string[],        // points the members agreed on
+  "disagreements": [{"point": string, "positions": string[]}],  // real disagreements between members, each position naming who held it
+  "openQuestions": string[]     // facts that would change the opinion
 }
-Use 2-5 ordered phases. Each phase needs measurable acceptance criteria and a stop/continue/scale decision gate.
-If the question is not a decision or project, still return a short plan for acting on the answer.`;
+Be faithful to what the council actually said. Keep items short; put reasoning in "detail".`;
 }
 
 function historyBlock(turns: Turn[]): string {

@@ -1,9 +1,10 @@
 // REST request/response shapes. Commands go over REST; state changes come back as events over the WebSocket.
 
-import type { Attachment, CouncilConfig } from "./model.ts";
+import type { Attachment, CaseMode, CouncilConfig } from "./model.ts";
 
 export interface CreateConversationRequest {
   title?: string;
+  mode?: CaseMode;
 }
 
 export interface SendMessageRequest {

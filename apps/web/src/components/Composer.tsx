@@ -1,60 +1,130 @@
-import { useRef, useState } from "react";
+import { Popover } from "@base-ui/react/popover";
+import { ArrowUp, FileText, Loader2, Mic, Paperclip, Smartphone, Square, X } from "lucide-react";
 import QRCode from "qrcode";
-import type { Conversation, ServerInfo } from "@synod/contracts";
-import { api, fileToBase64 } from "../lib/api";
+import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from "react";
+import { api } from "~/lib/api";
+import { cn } from "~/lib/utils";
+import { Button } from "./ui/button";
 
-export function Composer({ conversation, disabled, info }: { conversation: Conversation; disabled: boolean; info: ServerInfo | null }) {
-  const [text, setText] = useState("");
-  const [error, setError] = useState<string | null>(null);
-  const [sending, setSending] = useState(false);
+export interface ComposerFile {
+  id: string;
+  name: string;
+  readable?: boolean;
+}
+
+export function Composer({
+  placeholder,
+  disabled,
+  busy,
+  files,
+  voice,
+  phoneUrl,
+  autoFocus,
+  footer,
+  value,
+  onValueChange,
+  onAttach,
+  onRemoveFile,
+  onSend,
+  onStop,
+  size = "default"
+}: {
+  placeholder: string;
+  disabled?: boolean;
+  busy?: boolean;
+  files: ComposerFile[];
+  voice: boolean;
+  phoneUrl?: string | null;
+  autoFocus?: boolean;
+  footer?: ReactNode;
+  value: string;
+  onValueChange: (value: string) => void;
+  onAttach: (files: File[]) => void | Promise<void>;
+  onRemoveFile?: (id: string) => void;
+  onSend: () => void | Promise<void>;
+  onStop?: () => void;
+  size?: "default" | "hero";
+}) {
+  const textarea = useRef<HTMLTextAreaElement>(null);
   const fileInput = useRef<HTMLInputElement>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [dragging, setDragging] = useState(false);
+  const canSend = value.trim().length > 0 && !disabled && !busy;
+
+  // Grow with content up to a cap, like T3's composer.
+  useLayoutEffect(() => {
+    const el = textarea.current;
+    if (!el) return;
+    el.style.height = "0px";
+    el.style.height = `${Math.min(el.scrollHeight, size === "hero" ? 360 : 280)}px`;
+  }, [value, size]);
+
+  useEffect(() => {
+    if (autoFocus) textarea.current?.focus();
+  }, [autoFocus]);
 
   const send = async () => {
-    const prompt = text.trim();
-    if (!prompt || disabled || sending) return;
-    setSending(true);
+    if (!canSend) return;
     setError(null);
     try {
-      await api.send(conversation.id, prompt);
-      setText("");
+      await onSend();
     } catch (e) {
       setError((e as Error).message);
-    } finally {
-      setSending(false);
     }
   };
 
-  const upload = async (files: FileList | null) => {
+  const attach = async (list: FileList | File[] | null) => {
+    const items = Array.from(list ?? []);
+    if (!items.length) return;
     setError(null);
-    for (const file of Array.from(files ?? [])) {
-      try {
-        await api.upload(conversation.id, { name: file.name, mimeType: file.type, data: await fileToBase64(file) });
-      } catch (e) {
-        setError(`${file.name}: ${(e as Error).message}`);
-      }
+    try {
+      await onAttach(items);
+    } catch (e) {
+      setError((e as Error).message);
     }
     if (fileInput.current) fileInput.current.value = "";
   };
 
   return (
-    <div className="composer">
-      {conversation.pendingAttachments.length > 0 && (
-        <div className="chips">
-          {conversation.pendingAttachments.map((a) => (
-            <span key={a.id} className="chip" title={a.excerpt ? "Text will be shared with the council" : "Content not readable as text"}>
-              📎 {a.name}
-              {a.source === "mobile" && " (phone)"}
-            </span>
-          ))}
-        </div>
-      )}
-      {error && <p className="warning small">{error}</p>}
-      <div className="composer-box">
+    <div className="w-full">
+      <div
+        className={cn(
+          "relative rounded-2xl border bg-card shadow-xs/5 transition-[border-color,box-shadow] focus-within:border-ring/60 focus-within:ring-3 focus-within:ring-ring/10 dark:shadow-[0_14px_32px_-18px_rgb(0_0_0/75%)]",
+          dragging && "border-primary ring-3 ring-primary/20"
+        )}
+        onDragOver={(e) => {
+          e.preventDefault();
+          setDragging(true);
+        }}
+        onDragLeave={() => setDragging(false)}
+        onDrop={(e) => {
+          e.preventDefault();
+          setDragging(false);
+          void attach(e.dataTransfer.files);
+        }}
+      >
+        {files.length > 0 && (
+          <div className="flex flex-wrap gap-1.5 px-3 pt-3">
+            {files.map((f) => (
+              <span key={f.id} className="inline-flex max-w-56 items-center gap-1.5 rounded-lg border bg-muted py-1 pr-1.5 pl-2 text-xs" title={f.readable === false ? "The council can't read this file's contents as text" : undefined}>
+                <FileText className="size-3.5 shrink-0 text-muted-foreground" />
+                <span className="truncate">{f.name}</span>
+                {onRemoveFile && (
+                  <button type="button" className="cursor-pointer text-muted-foreground hover:text-foreground" onClick={() => onRemoveFile(f.id)} aria-label={`Remove ${f.name}`}>
+                    <X className="size-3" />
+                  </button>
+                )}
+              </span>
+            ))}
+          </div>
+        )}
         <textarea
-          value={text}
-          rows={3}
-          placeholder={disabled ? "The council is working…" : "Ask the council…  (Enter to send, Shift+Enter for a new line)"}
-          onChange={(e) => setText(e.target.value)}
+          ref={textarea}
+          value={value}
+          rows={size === "hero" ? 4 : 2}
+          disabled={disabled}
+          placeholder={placeholder}
+          onChange={(e) => onValueChange(e.target.value)}
           onKeyDown={(e) => {
             if (e.key === "Enter" && !e.shiftKey && !e.nativeEvent.isComposing) {
               e.preventDefault();
@@ -64,29 +134,51 @@ export function Composer({ conversation, disabled, info }: { conversation: Conve
           onPaste={(e) => {
             if (e.clipboardData.files.length) {
               e.preventDefault();
-              void upload(e.clipboardData.files);
+              void attach(e.clipboardData.files);
             }
           }}
+          className={cn(
+            "block w-full resize-none bg-transparent px-4 pt-3.5 text-[0.9375rem] leading-relaxed outline-none placeholder:text-muted-foreground/70 disabled:cursor-not-allowed",
+            size === "hero" ? "min-h-28" : "min-h-14"
+          )}
         />
-        <div className="composer-actions">
-          <input ref={fileInput} type="file" multiple hidden onChange={(e) => upload(e.target.files)} />
-          <button className="ghost" title="Attach files" onClick={() => fileInput.current?.click()}>
-            📎
-          </button>
-          {info?.voice.available && <VoiceButton onText={(t) => setText((cur) => (cur ? `${cur} ${t}` : t))} onError={setError} />}
-          <PhoneButton conversationId={conversation.id} baseUrl={info?.publicBaseUrl ?? null} />
-          <button className="primary" onClick={send} disabled={disabled || sending || !text.trim()}>
-            Send
-          </button>
+        <div className="flex items-center gap-1 px-2 pt-1 pb-2">
+          <input ref={fileInput} type="file" multiple hidden onChange={(e) => attach(e.target.files)} />
+          <Button variant="ghost-muted" size="icon-sm" onClick={() => fileInput.current?.click()} title="Attach files (or drop / paste)" aria-label="Attach files">
+            <Paperclip />
+          </Button>
+          {voice && <VoiceButton onText={(t) => onValueChange(value ? `${value.trimEnd()} ${t}` : t)} onError={setError} />}
+          {phoneUrl && <PhoneButton url={phoneUrl} />}
+          <div className="ml-auto flex items-center gap-2">
+            {footer}
+            {busy && onStop ? (
+              <Button variant="outline" size="icon-sm" onClick={onStop} title="Stop the council" aria-label="Stop">
+                <Square className="size-3 fill-current" />
+              </Button>
+            ) : (
+              <Button size="icon-sm" className="rounded-full" disabled={!canSend} onClick={send} aria-label="Send" title="Send (Enter)">
+                <ArrowUp />
+              </Button>
+            )}
+          </div>
         </div>
       </div>
+      {error && <p className="mt-2 px-1 text-error-foreground text-xs">{error}</p>}
     </div>
   );
 }
 
 function VoiceButton({ onText, onError }: { onText: (text: string) => void; onError: (message: string) => void }) {
   const [state, setState] = useState<"idle" | "recording" | "transcribing">("idle");
+  const [seconds, setSeconds] = useState(0);
   const recorder = useRef<MediaRecorder | null>(null);
+
+  useEffect(() => {
+    if (state !== "recording") return;
+    setSeconds(0);
+    const t = setInterval(() => setSeconds((s) => s + 1), 1000);
+    return () => clearInterval(t);
+  }, [state]);
 
   const start = async () => {
     try {
@@ -98,8 +190,7 @@ function VoiceButton({ onText, onError }: { onText: (text: string) => void; onEr
         stream.getTracks().forEach((t) => t.stop());
         setState("transcribing");
         try {
-          const blob = new Blob(chunks, { type: rec.mimeType || "audio/webm" });
-          const { text } = await api.transcribe(blob, navigator.language.slice(0, 2));
+          const { text } = await api.transcribe(new Blob(chunks, { type: rec.mimeType || "audio/webm" }), navigator.language.slice(0, 2));
           onText(text);
         } catch (e) {
           onError((e as Error).message);
@@ -115,40 +206,36 @@ function VoiceButton({ onText, onError }: { onText: (text: string) => void; onEr
     }
   };
 
+  if (state === "recording")
+    return (
+      <Button variant="outline" size="sm" className="border-error/40 text-error-foreground" onClick={() => recorder.current?.stop()} title="Stop dictation">
+        <span className="size-2 animate-pulse rounded-full bg-error" />
+        {Math.floor(seconds / 60)}:{String(seconds % 60).padStart(2, "0")}
+      </Button>
+    );
   return (
-    <button
-      className={`ghost ${state === "recording" ? "recording" : ""}`}
-      title={state === "recording" ? "Stop recording" : "Dictate"}
-      disabled={state === "transcribing"}
-      onClick={() => (state === "recording" ? recorder.current?.stop() : start())}
-    >
-      {state === "transcribing" ? "…" : state === "recording" ? "■" : "🎙"}
-    </button>
+    <Button variant="ghost-muted" size="icon-sm" disabled={state === "transcribing"} onClick={start} title="Dictate" aria-label="Dictate">
+      {state === "transcribing" ? <Loader2 className="animate-spin" /> : <Mic />}
+    </Button>
   );
 }
 
-function PhoneButton({ conversationId, baseUrl }: { conversationId: string; baseUrl: string | null }) {
+function PhoneButton({ url }: { url: string }) {
   const [qr, setQr] = useState<string | null>(null);
-  const url = `${baseUrl ?? location.origin}/mobile/${conversationId}`;
   return (
-    <>
-      <button
-        className="ghost"
-        title="Send files from your phone"
-        onClick={async () => setQr(qr ? null : await QRCode.toDataURL(url, { margin: 1, width: 220 }))}
-      >
-        📱
-      </button>
-      {qr && (
-        <div className="popover" role="dialog" aria-label="Upload from phone">
-          <img src={qr} alt="QR code for mobile upload" width={220} height={220} />
-          <p className="small">Scan with your phone to send photos or files into this conversation.</p>
-          <code className="small">{url}</code>
-          <button className="ghost small" onClick={() => setQr(null)}>
-            Close
-          </button>
-        </div>
-      )}
-    </>
+    <Popover.Root onOpenChange={(open) => open && !qr && QRCode.toDataURL(url, { margin: 1, width: 200 }).then(setQr)}>
+      <Popover.Trigger render={<Button variant="ghost-muted" size="icon-sm" title="Add files from your phone" aria-label="Add files from your phone" />}>
+        <Smartphone />
+      </Popover.Trigger>
+      <Popover.Portal>
+        <Popover.Positioner side="top" align="start" sideOffset={8} className="z-50">
+          <Popover.Popup className="w-64 rounded-xl border bg-popover p-4 shadow-xl transition-[opacity,scale] duration-150 data-ending-style:scale-95 data-ending-style:opacity-0 data-starting-style:scale-95 data-starting-style:opacity-0">
+            <p className="font-medium text-sm">Add from your phone</p>
+            <p className="mt-0.5 text-muted-foreground text-xs">Scan to send photos, scans, or notes into this case.</p>
+            <div className="mt-3 flex justify-center rounded-lg bg-white p-2">{qr ? <img src={qr} alt="QR code" width={200} height={200} /> : <div className="size-[200px]" />}</div>
+          </Popover.Popup>
+        </Popover.Positioner>
+      </Popover.Portal>
+    </Popover.Root>
   );
 }

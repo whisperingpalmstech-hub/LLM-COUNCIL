@@ -45,21 +45,26 @@ export class MockProvider implements Provider {
       }
       case "synthesis":
         return `**[mock:${model}]** Council synthesis (offline demo).\n\nThe council agrees: run a small, time-boxed pilot with a clear stop/scale gate before committing further resources.`;
-      case "plan":
+      case "brief": {
+        const sections = [...prompt.matchAll(/\{"title": "([^"]+)"/g)].map((m) => ({
+          title: m[1],
+          items: [
+            { text: `${m[1]}: first point (demo)`, detail: "Offline demo detail.", level: "high" },
+            { text: `${m[1]}: second point (demo)`, level: "medium" }
+          ]
+        }));
         return JSON.stringify({
-          decision: "CONDITIONAL GO",
-          summary: "Run a time-boxed pilot before committing (offline demo plan).",
-          assumptions: ["Demo output — connect a real provider for substantive advice."],
-          risks: ["Pilot results may not generalise."],
-          phases: [
-            { name: "Define", objective: "Write down the success metric and budget ceiling.", duration: "1 week", owner: "Decision owner", tasks: ["Agree the metric", "Set the budget cap"], acceptanceCriteria: ["Metric and cap documented"], decisionGate: "Metric agreed" },
-            { name: "Pilot", objective: "Run the smallest experiment that produces evidence.", duration: "2-4 weeks", owner: "Pilot lead", tasks: ["Launch pilot", "Collect results"], acceptanceCriteria: ["Results captured against the metric"], decisionGate: "Scale, iterate, or stop" }
-          ],
-          successMetrics: ["Pilot metric meets target"],
-          openQuestions: [],
-          dissent: [],
-          confidence: 0.5
+          verdict: "Demo verdict",
+          bottomLine: "Offline demo brief. Connect a real provider for a substantive second opinion.",
+          confidence: 0.5,
+          redFlags: ["Demo red flag"],
+          sections,
+          nextSteps: [{ action: "Connect a real model provider", why: "Mock output is not advice", urgency: "now" }],
+          consensus: ["Members agreed on the overall direction."],
+          disagreements: [{ point: "How cautious to be", positions: ["Mock Analyst: move now", "Mock Skeptic: wait for more data"] }],
+          openQuestions: ["What would change the answer?"]
         });
+      }
     }
   }
 }

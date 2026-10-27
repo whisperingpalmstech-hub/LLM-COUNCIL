@@ -32,7 +32,8 @@ test("health is public; everything else requires auth", async () => {
 
 test("end to end: create, attach, ask, stream events over WebSocket, download plan", async () => {
   await api("/api/council", { method: "PUT", body: JSON.stringify({ ...(await (await api("/api/council")).json()), clarify: false }) });
-  const conversation = (await (await api("/api/conversations", { method: "POST", body: "{}" })).json()) as Conversation;
+  const conversation = (await (await api("/api/conversations", { method: "POST", body: JSON.stringify({ mode: "legal" }) })).json()) as Conversation;
+  assert.equal(conversation.mode, "legal");
 
   const attachment = await api(`/api/conversations/${conversation.id}/attachments`, {
     method: "POST",
@@ -61,7 +62,7 @@ test("end to end: create, attach, ask, stream events over WebSocket, download pl
 
   assert.ok(types.includes("turn.stage1_response"));
   assert.ok(types.includes("turn.stage2_aggregated"));
-  assert.ok(types.includes("turn.plan_generated"));
+  assert.ok(types.includes("turn.brief_generated"));
   assert.equal(types.at(-1), "turn.completed");
 
   const full = (await (await api(`/api/conversations/${conversation.id}`)).json()) as Conversation;
@@ -69,9 +70,9 @@ test("end to end: create, attach, ask, stream events over WebSocket, download pl
   assert.match(full.turns[0].attachments[0].excerpt ?? "", /\$40k/);
   assert.equal(full.pendingAttachments.length, 0);
 
-  const md = await api(`/api/conversations/${conversation.id}/turns/${turnId}/plan.md`);
+  const md = await api(`/api/conversations/${conversation.id}/turns/${turnId}/brief.md`);
   assert.equal(md.status, 200);
-  assert.match(await md.text(), /## Phases/);
+  assert.match(await md.text(), /## Next steps/);
 
   const handoff = await api(`/api/conversations/${conversation.id}/turns/${turnId}/handoff`, { method: "POST" });
   assert.deepEqual(((await handoff.json()) as { simulated: boolean }).simulated, true);
