@@ -1,6 +1,6 @@
 // All model-facing prompt text lives here. Stage 2 and 3 follow Karpathy's llm-council.
 
-import type { Attachment, CaseMode, SearchResult, Stage1Response, Stage2Review, Turn } from "@synod/contracts";
+import type { Attachment, CaseContext, CaseMode, SearchResult, Stage1Response, Stage2Review, Turn } from "@synod/contracts";
 import { MODES } from "./modes.ts";
 
 export function answerSystem(mode: CaseMode): string {
@@ -8,6 +8,10 @@ export function answerSystem(mode: CaseMode): string {
 }
 
 export interface TurnContext {
+  /** The user asked for concise answers. */
+  concise: boolean;
+  /** Date and who is asking, so advice fits today and the user's country and role. */
+  about: string;
   prompt: string;
   history: string;
   attachments: string;
@@ -17,6 +21,8 @@ export interface TurnContext {
 
 export function buildContext(turn: Turn, previousTurns: Turn[]): TurnContext {
   return {
+    concise: turn.context?.profile?.answerStyle === "concise",
+    about: aboutBlock(turn.context),
     prompt: turn.prompt,
     history: historyBlock(previousTurns),
     attachments: attachmentsBlock(turn.attachments),
@@ -28,6 +34,7 @@ export function buildContext(turn: Turn, previousTurns: Turn[]): TurnContext {
 /** The question as every council member sees it, with all supporting context. */
 export function questionBlock(ctx: TurnContext): string {
   return [
+    ctx.about,
     ctx.history && `Earlier in this conversation:\n${ctx.history}`,
     ctx.attachments && `Attached material:\n${ctx.attachments}`,
     ctx.research && `Web search results (may be incomplete; cite when used):\n${ctx.research}`,
@@ -46,6 +53,37 @@ Ask when the best answer depends on specifics of the user's situation that the m
 Do not ask for factual or general-knowledge questions, when the user already gave enough context, or merely to confirm something obvious.
 If you ask, make it a single question that gathers the most decision-relevant context at once.
 Return JSON: {"needed": boolean, "question": string}`;
+}
+
+/** Route a case to a mode from its first message. */
+export function classifyPrompt(text: string): string {
+  return `Classify this request for a council of expert advisers into exactly one case type:
+- "medical": clinical questions about patients, diagnosis, treatment, drugs, or tests
+- "legal": questions about law, contracts, disputes, liability, regulation, or rights, including legal questions asked by clinicians or engineers
+- "code": software, code review, infrastructure, data, security, or an action an AI agent wants to take
+- "general": business, strategy, product, finance, and anything else
+
+Request:
+${text.slice(0, 4000)}
+
+Return JSON: {"mode": "medical" | "legal" | "code" | "general"}`;
+}
+
+/** A later round: revise your answer after seeing the others and their critiques. */
+export function revisePrompt(ctx: TurnContext, labelled: { label: string; text: string }[], ownLabel: string, reviews: Stage2Review[]): string {
+  const answers = labelled.map((r) => `${r.label}${r.label === ownLabel ? " (your previous answer)" : ""}:\n${truncate(r.text, 4000)}`).join("\n\n");
+  const critiques = reviews.map((r, i) => `Reviewer ${i + 1}:\n${truncate(r.text.replace(/FINAL RANKING:[\s\S]*$/, "").trim(), 2000)}`).join("\n\n");
+  return `${questionBlock(ctx)}
+
+The council answered this independently, then reviewed each other's answers anonymously.
+
+Answers from the last round:
+${answers}
+
+Peer critiques (they refer to answers by label):
+${critiques || "None"}
+
+Write your revised answer. Fix any errors the critiques identified in ${ownLabel || "your answer"}. Adopt better points from the other answers when they are right. Keep positions you still believe are correct, and say briefly why you disagree with a critique if you do. Write the complete revised answer, not a list of changes.`;
 }
 
 export function reviewPrompt(ctx: TurnContext, labelled: { label: string; text: string }[]): string {
@@ -98,7 +136,7 @@ Your task as Chairman is to synthesize all of this information into a single, co
 - The peer rankings and what they reveal about response quality
 - Any patterns of agreement or disagreement
 
-Keep genuine disagreement visible rather than averaging it away. Provide a clear, well-reasoned final answer that represents the council's collective wisdom:`;
+Keep genuine disagreement visible rather than averaging it away. Lead with the answer. A structured brief is produced separately, so don't repeat every detail: stay under about ${ctx.concise ? 450 : 800} words. Provide a clear, well-reasoned final answer that represents the council's collective wisdom:`;
 }
 
 export function briefPrompt(ctx: TurnContext, mode: CaseMode, answers: Stage1Response[], reviews: Stage2Review[], ranking: string): string {
@@ -121,7 +159,7 @@ You are the chairman. Weigh the answers by their quality and the critiques (corr
   "verdict": string,            // ${def.verdictHint}; at most 10 words
   "bottomLine": string,         // 1-2 sentences: the answer a busy professional needs first
   "confidence": number,         // 0-1, the council's overall confidence
-  "redFlags": string[],         // urgent or dangerous issues needing attention now; [] if none
+  "redFlags": string[],         // urgent or dangerous issues in the user's situation needing attention now; [] if none. Never about the council's own mistakes or debate.
   "sections": [
 ${sections}
   ],
@@ -130,7 +168,26 @@ ${sections}
   "disagreements": [{"point": string, "positions": string[]}],  // real disagreements between members, each position naming who held it
   "openQuestions": string[]     // facts that would change the opinion
 }
+Use the section titles above when they fit the question. If the question is a different kind (for example a medication-interaction question, or a legal question about a clinical event), replace them with 2-4 section titles that fit it better, in the same shape.
+Correct errors silently in the content; mention a member's mistake only inside "disagreements", never in the verdict, bottom line, or red flags.
 Be faithful to what the council actually said. Keep items short; put reasoning in "detail".`;
+}
+
+function aboutBlock(context?: CaseContext): string {
+  if (!context) return "";
+  const p = context.profile;
+  const who = p
+    ? [
+        `The person asking is a ${p.profession === "other" ? "professional" : p.profession}${p.specialty ? ` (${p.specialty})` : ""}`,
+        p.setting ? `working in ${p.setting}` : "",
+        `in ${[p.region, p.country].filter(Boolean).join(", ")}.`,
+        `Use that country's guidelines, law, units, terminology, and spelling unless the question says otherwise.`,
+        p.answerStyle === "concise" ? "They prefer concise answers." : "They prefer detailed answers."
+      ]
+        .filter(Boolean)
+        .join(" ")
+    : "";
+  return [`Today is ${context.date}${context.timezone ? ` (${context.timezone})` : ""}.`, who].filter(Boolean).join(" ");
 }
 
 function historyBlock(turns: Turn[]): string {
@@ -146,7 +203,13 @@ function historyBlock(turns: Turn[]): string {
 
 function attachmentsBlock(attachments: Attachment[]): string {
   return attachments
-    .map((a) => (a.excerpt ? `--- ${a.name} ---\n${a.excerpt}` : `--- ${a.name} (${a.mimeType}, content not readable as text) ---`))
+    .map((a) =>
+      a.excerpt
+        ? `--- ${a.name} ---\n${a.excerpt}`
+        : a.kind === "image" || a.mimeType.startsWith("image/")
+          ? `--- ${a.name} (image, shown to you alongside this message) ---`
+          : `--- ${a.name} (${a.mimeType}, content could not be read) ---`
+    )
     .join("\n\n");
 }
 

@@ -1,9 +1,11 @@
 // REST request/response shapes. Commands go over REST; state changes come back as events over the WebSocket.
 
-import type { Attachment, AuthUser, CaseMode, CouncilConfig, SignupMode } from "./model.ts";
+import type { Attachment, AuthUser, CaseMode, CouncilConfig, Depth, SignupMode } from "./model.ts";
 
 export interface AuthConfigResponse {
   signup: SignupMode;
+  /** "Continue with Google" is available. */
+  google: boolean;
 }
 
 export interface MeResponse {
@@ -22,11 +24,16 @@ export interface SignupRequest extends LoginRequest {
 
 export interface CreateConversationRequest {
   title?: string;
-  mode?: CaseMode;
+  /** "auto" classifies the case from its first message. */
+  mode?: CaseMode | "auto";
 }
 
 export interface SendMessageRequest {
   prompt: string;
+  /** Deliberation depth for this message (defaults to the user's setting). */
+  depth?: Depth;
+  /** Client clock, so the council knows today's date in the user's timezone. */
+  timezone?: string;
   /** Override the saved council for this turn only. */
   council?: Partial<CouncilConfig>;
 }

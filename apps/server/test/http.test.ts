@@ -70,7 +70,10 @@ test("cases are private to their owner, including over the WebSocket", async () 
   const adminList = (await (await admin.call("/api/conversations")).json()) as { id: string }[];
   assert.ok(!adminList.some((s) => s.id === mine.id));
   assert.equal((await admin.call("/api/council", { method: "PUT", body: JSON.stringify({ ...(await (await admin.call("/api/council")).json()), clarify: false }) })).status, 200);
-  assert.equal((await alice.call("/api/council", { method: "PUT", body: "{}" })).status, 403);
+  // Council settings are per person: Alice's change doesn't touch the admin's.
+  const aliceCouncil = (await (await alice.call("/api/council")).json()) as { depth: string };
+  assert.equal((await alice.call("/api/council", { method: "PUT", body: JSON.stringify({ ...aliceCouncil, depth: "thorough" }) })).status, 200);
+  assert.equal(((await (await admin.call("/api/council")).json()) as { depth: string }).depth, "standard");
 
   const adminSocket = new WebSocket(base.replace("http", "ws") + "/ws", { headers: { cookie: admin.cookie() } });
   const leaked: string[] = [];
@@ -131,4 +134,21 @@ test("a signed QR link lets a phone upload to one case without signing in", asyn
   assert.equal((await phone(`/api/conversations/${conversation.id}/attachments?token=bad.token`)).status, 401);
   const other = (await (await alice.call("/api/conversations", { method: "POST", body: "{}" })).json()) as Conversation;
   assert.equal((await phone(`/api/conversations/${other.id}/attachments?token=${token}`)).status, 401, "token is bound to its case");
+});
+
+test("onboarding saves a profile that comes back on /me", async () => {
+  assert.equal(((await (await alice.call("/api/auth/me")).json()) as { user: { profile: unknown } }).user.profile, null);
+  assert.equal((await alice.call("/api/me/profile", { method: "PUT", body: JSON.stringify({ profession: "lawyer" }) })).status, 400, "country is required");
+  const saved = await alice.call("/api/me/profile", {
+    method: "PUT",
+    body: JSON.stringify({ profession: "lawyer", specialty: "Employment", country: "United Kingdom", region: "England", answerStyle: "concise" })
+  });
+  assert.equal(saved.status, 200);
+  const me = (await (await alice.call("/api/auth/me")).json()) as { user: { profile: { specialty: string; country: string } } };
+  assert.equal(me.user.profile.specialty, "Employment");
+});
+
+test("Google sign-in is hidden when unconfigured", async () => {
+  assert.equal(((await (await client().call("/api/auth/config")).json()) as { google: boolean }).google, false);
+  assert.equal((await client().call("/api/auth/google/start")).status, 404);
 });

@@ -42,7 +42,11 @@ export class OpenAiCompatibleProvider implements Provider {
     const { baseUrl, apiKey, extraHeaders, extraBody, supportsJsonMode = true, timeoutMs } = this.options;
     const messages = [
       ...(request.system ? [{ role: "system", content: request.system }] : []),
-      ...request.messages
+      ...request.messages.map((m) =>
+        m.images?.length
+          ? { role: m.role, content: [{ type: "text", text: m.content }, ...m.images.map((img) => ({ type: "image_url", image_url: { url: `data:${img.mimeType};base64,${img.data}` } }))] }
+          : { role: m.role, content: m.content }
+      )
     ];
     const url = `${baseUrl.replace(/\/+$/, "")}/chat/completions`;
     const options = {

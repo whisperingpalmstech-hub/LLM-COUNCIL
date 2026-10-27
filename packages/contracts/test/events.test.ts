@@ -3,6 +3,8 @@ import { test } from "node:test";
 import { applyEvent, emptyConversation, type ConversationEvent, type CouncilConfig } from "../src/index.ts";
 
 const council: CouncilConfig = {
+  auto: false,
+  depth: "quick",
   members: [{ id: "a", label: "A", provider: "mock", model: "" }],
   chairman: { id: "a", label: "A", provider: "mock", model: "" },
   clarify: false,

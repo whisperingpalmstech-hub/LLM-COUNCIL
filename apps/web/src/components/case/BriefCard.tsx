@@ -49,6 +49,7 @@ export function BriefCard({ conversationId, turn, brief, hermesConfigured }: { c
         </div>
         <div {...step()} className={cn("mt-5 flex flex-wrap items-center gap-x-6 gap-y-3", fresh && "reveal")}>
           <ConfidenceMeter value={brief.confidence} animate={fresh} />
+          {brief.agreement != null && <Agreement value={brief.agreement} reviewers={turn.aggregate?.rankings.length ?? 0} rounds={turn.rounds ?? 3} converged={Boolean(turn.convergedEarly)} />}
           <CouncilStack members={turn.council.members} />
         </div>
       </header>
@@ -201,6 +202,7 @@ function Level({ level, word }: { level: NonNullable<BriefItem["level"]>; word: 
 function ConfidenceMeter({ value, animate }: { value: number; animate: boolean }) {
   const pct = Math.round(value * 100);
   const label = pct >= 75 ? "High confidence" : pct >= 50 ? "Moderate confidence" : "Low confidence";
+  // The chairman's own estimate; the measured agreement sits next to it.
   const [shown, setShown] = useState(animate ? 0 : pct);
   // Fill once, after the verdict has settled.
   useEffect(() => {
@@ -217,6 +219,21 @@ function ConfidenceMeter({ value, animate }: { value: number; animate: boolean }
         {label}, {pct}%
       </span>
     </div>
+  );
+}
+
+/** Measured, not self-reported: how many reviewers independently picked the same best answer. */
+function Agreement({ value, reviewers, rounds, converged }: { value: number; reviewers: number; rounds: number; converged: boolean }) {
+  const pct = Math.round(value * 100);
+  const word = pct >= 99 ? "Unanimous" : pct >= 60 ? "Majority agreed" : "Split council";
+  return (
+    <span
+      className={cn("inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs", pct >= 99 ? "bg-success/12 text-success-foreground" : pct >= 60 ? "bg-muted text-muted-foreground" : "bg-warning-surface text-warning-foreground")}
+      title={`Share of the ${reviewers} reviewers whose top pick (ignoring their own answer) matched the overall winner. ${rounds} rounds${converged ? ", stopped early on consensus" : ""}.`}
+    >
+      {word}
+      <span className="tabular-nums opacity-70">{pct}%</span>
+    </span>
   );
 }
 

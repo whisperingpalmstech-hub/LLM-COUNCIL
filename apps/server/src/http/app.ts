@@ -26,7 +26,9 @@ import type { WebSearch } from "../integrations/search.ts";
 import { MAX_AUDIO_BYTES, type Transcriber } from "../integrations/transcription.ts";
 import type { ProviderRegistry } from "../providers/registry.ts";
 import { AuthError, RateLimiter, signUploadToken, verifyUploadToken, type Accounts } from "../auth/accounts.ts";
-import { clearSessionCookie, readCookie, SESSION_COOKIE, sessionUser, setSessionCookie } from "./session.ts";
+import { googleAuthUrl, googleProfile, OAUTH_COOKIE, readState } from "../auth/google.ts";
+import { RECIPES } from "../council/recipes.ts";
+import { clearSessionCookie, isHttps, readCookie, SESSION_COOKIE, sessionUser, setSessionCookie } from "./session.ts";
 
 declare module "express-serve-static-core" {
   interface Request {
@@ -81,7 +83,42 @@ export function createApp({ config, store, engine, providers, search, transcribe
   });
 
   // ---- public: sign-in ----
-  api.get("/auth/config", (_req, res) => res.json({ signup: signupMode() } satisfies AuthConfigResponse));
+  api.get("/auth/config", (_req, res) => res.json({ signup: signupMode(), google: Boolean(config.google) } satisfies AuthConfigResponse));
+
+  // ---- Continue with Google ----
+  const googleRedirect = (req: Request) => {
+    const base = config.publicBaseUrl ?? `${isHttps(req) ? "https" : "http"}://${req.headers.host}`;
+    return `${base}/api/auth/google/callback`;
+  };
+  api.get("/auth/google/start", (req, res) => {
+    if (!config.google) throw new AuthError("Google sign-in isn't set up on this server.", 404);
+    const next = typeof req.query.next === "string" && req.query.next.startsWith("/") ? req.query.next : undefined;
+    const invite = typeof req.query.invite === "string" ? req.query.invite.trim().slice(0, 100) : undefined;
+    const { url, nonce } = googleAuthUrl(config.google, googleRedirect(req), secret, { ...(next ? { next } : {}), ...(invite ? { invite } : {}) });
+    res.setHeader("Set-Cookie", `${OAUTH_COOKIE}=${nonce}; Path=/api/auth/google; HttpOnly; SameSite=Lax; Max-Age=600${isHttps(req) ? "; Secure" : ""}`);
+    res.redirect(302, url);
+  });
+  api.get("/auth/google/callback", async (req, res) => {
+    const fail = (message: string) => res.redirect(302, `/login?error=${encodeURIComponent(message)}`);
+    try {
+      if (!config.google) throw new AuthError("Google sign-in isn't set up on this server.", 404);
+      if (typeof req.query.error === "string") return fail("Google sign-in was cancelled.");
+      const state = readState(secret, String(req.query.state ?? ""), readCookie(req, OAUTH_COOKIE));
+      const profile = await googleProfile(config.google, googleRedirect(req), String(req.query.code ?? ""));
+      const user = accounts.googleUser(profile, () => {
+        const mode = signupMode();
+        if (mode === "first-user") return "admin";
+        if (mode === "open") return "member";
+        if (mode === "invite" && state.invite && state.invite === config.signup.inviteCode) return "member";
+        return null;
+      });
+      const session = accounts.createSession(user.id);
+      setSessionCookie(req, res, session.token, session.expires);
+      res.redirect(302, user.profile ? (state.next ?? "/new") : "/welcome");
+    } catch (error) {
+      fail(error instanceof AuthError ? error.message : "Google sign-in failed. Please try again.");
+    }
+  });
   api.get("/auth/me", (req, res) => {
     if (!req.user) return res.status(401).json({ error: "Not signed in." });
     res.json({ user: req.user });
@@ -149,11 +186,12 @@ export function createApp({ config, store, engine, providers, search, transcribe
     res.json(info);
   });
 
-  api.get("/council", (_req, res) => res.json(engine.council()));
-  api.put("/council", (req, res) => {
-    if (req.user!.role !== "admin") throw Object.assign(new Error("Only an administrator can change the council."), { status: 403 });
-    res.json(engine.saveCouncil(req.body as CouncilConfig));
-  });
+  // Each person's own council settings (defaults: recommended councils, standard depth).
+  api.get("/council", (req, res) => res.json(engine.council(req.user!.id)));
+  api.put("/council", (req, res) => res.json(engine.saveCouncil(req.body as CouncilConfig, req.user!.id)));
+  api.get("/council/recipes", (_req, res) => res.json({ available: engine.autoAvailable(), recipes: RECIPES }));
+
+  api.put("/me/profile", (req, res) => res.json({ user: accounts.setProfile(req.user!.id, req.body) }));
 
   api.get("/conversations", (req, res) => res.json(store.summaries().filter((s) => canAccess(store.require(s.id), req.user!))));
   api.post("/conversations", (req, res) => {
@@ -180,10 +218,16 @@ export function createApp({ config, store, engine, providers, search, transcribe
     res.json(store.require(conversation.id));
   });
 
-  api.post("/conversations/:id/messages", (req, res) => {
+  api.post("/conversations/:id/messages", async (req, res) => {
     const body = req.body as SendMessageRequest;
     owned(req.params.id, req.user);
-    const turnId = engine.sendMessage(req.params.id, String(body?.prompt ?? ""), body?.council);
+    const turnId = await engine.sendMessage(req.params.id, String(body?.prompt ?? ""), {
+      override: body?.council,
+      depth: body?.depth,
+      timezone: typeof body?.timezone === "string" ? body.timezone.slice(0, 64) : undefined,
+      profile: req.user!.profile,
+      userId: req.user!.id
+    });
     res.status(202).json({ turnId });
   });
   api.post("/conversations/:id/clarification", (req, res) => {

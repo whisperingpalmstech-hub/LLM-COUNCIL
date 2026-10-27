@@ -51,6 +51,10 @@ OpenAI, Anthropic, Gemini, DeepSeek, OpenRouter, SiliconFlow, Ollama, RouteLLM a
 | Voice input | `OPENROUTER_API_KEY` (cheap `google/gemini-2.5-flash-lite`, with fallbacks), or local whisper.cpp, or `OPENAI_API_KEY` |
 | Obsidian notes | `OBSIDIAN_VAULT_PATH`: every completed answer is written as a note |
 | Hermes hand-off | `HERMES_WEBHOOK_URL`. Simulated when unset, and always needs a confirm click |
+| Continue with Google | `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET` (redirect URI `<PUBLIC_BASE_URL>/api/auth/google/callback`) |
+| Onboarding | New users answer four questions (role, specialty, country, answer style); every case gets them plus today's date as context |
+| Depth | Quick (3 rounds), Standard (5), Thorough (7): answer → blind review → revise → review → verdict. Stops early when reviewers agree |
+| Recommended councils | Models picked per case type from public evals; users can choose their own in settings |
 | Accounts | Email and password sign-in; each person's cases are private. `SYNOD_ADMIN_EMAIL` / `SYNOD_ADMIN_PASSWORD` create the admin on startup; testers join with `SYNOD_INVITE_CODE` |
 
 ## Commands

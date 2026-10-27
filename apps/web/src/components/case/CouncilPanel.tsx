@@ -1,4 +1,4 @@
-import { createContext, useContext } from "react";
+import { createContext, useContext, useState } from "react";
 import { Tabs } from "@base-ui/react/tabs";
 import { Crown, X } from "lucide-react";
 import type { Turn } from "@synod/contracts";
@@ -29,6 +29,9 @@ export function CouncilPanel({
   onMemberChange: (memberId: string) => void;
   onClose: () => void;
 }) {
+  const maxRound = Math.max(1, ...turn.stage1.map((r) => r.round ?? 1));
+  const [picked, setPicked] = useState<number | null>(null);
+  const round = Math.min(picked ?? maxRound, maxRound);
   return (
     <Seats.Provider value={[...turn.council.members, turn.council.chairman]}>
       <div className="fixed inset-0 z-30 bg-black/40 lg:hidden" onClick={onClose} />
@@ -50,19 +53,46 @@ export function CouncilPanel({
               <X />
             </Button>
           </div>
+          {maxRound > 1 && tab !== "agreement" && (
+            <div className="flex shrink-0 items-center gap-1 border-b px-3 py-2 text-xs">
+              <span className="mr-1 text-muted-foreground">Round</span>
+              {Array.from({ length: maxRound }, (_, i) => i + 1).map((r) => (
+                <button
+                  key={r}
+                  type="button"
+                  onClick={() => setPicked(r)}
+                  className={cn("h-6 cursor-pointer rounded-md px-2 transition-colors", r === round ? "bg-accent font-medium text-foreground" : "text-muted-foreground hover:text-foreground")}
+                >
+                  {r === 1 ? "First answers" : `Revision ${r - 1}`}
+                </button>
+              ))}
+            </div>
+          )}
           <Tabs.Panel value="opinions" className="flex min-h-0 flex-1 flex-col">
-            <Opinions turn={turn} memberId={memberId} onMemberChange={onMemberChange} />
+            <Opinions turn={roundView(turn, round)} memberId={memberId} onMemberChange={onMemberChange} />
           </Tabs.Panel>
           <Tabs.Panel value="reviews" className="flex min-h-0 flex-1 flex-col">
-            <Reviews turn={turn} memberId={memberId} onMemberChange={onMemberChange} />
+            <Reviews turn={roundView(turn, round)} memberId={memberId} onMemberChange={onMemberChange} />
           </Tabs.Panel>
           <Tabs.Panel value="agreement" className="min-h-0 flex-1 overflow-y-auto">
-            <Agreement turn={turn} />
+            <Agreement turn={roundView(turn, turn.aggregate?.round ?? 1)} />
           </Tabs.Panel>
         </Tabs.Root>
       </aside>
     </Seats.Provider>
   );
+}
+
+/**
+ * A turn narrowed to one round: that round's answers and reviews, with the anonymous labels
+ * rebuilt the way the server assigned them (in order of that round's successful answers).
+ */
+function roundView(turn: Turn, round: number): Turn {
+  const stage1 = turn.stage1.filter((r) => (r.round ?? 1) === round);
+  const stage2 = turn.stage2.filter((r) => (r.round ?? 1) === round);
+  if (turn.aggregate && (turn.aggregate.round ?? 1) === round) return { ...turn, stage1, stage2 };
+  const labelToMemberId = Object.fromEntries(stage1.filter((r) => !r.error).map((r, i) => [`Response ${String.fromCharCode(65 + i)}`, r.memberId]));
+  return { ...turn, stage1, stage2, aggregate: stage2.length ? { round, labelToMemberId, rankings: [], agreement: 0, selfPreferred: 0 } : undefined };
 }
 
 function MemberPicker({ items, selected, onSelect }: { items: { id: string; label: string; failed?: boolean; badge?: string }[]; selected?: string; onSelect: (id: string) => void }) {
@@ -175,12 +205,19 @@ function Agreement({ turn }: { turn: Turn }) {
     return idx >= 0 ? idx + 1 : null;
   };
   const unanimousTop = reviews.length > 1 && reviews.every((r) => rankGiven(r.ranking, authors[0].memberId) === 1);
+  const agreementPct = Math.round((agg.agreement ?? 0) * 100);
 
   return (
     <div className="flex flex-col gap-6 px-5 py-5">
       <div>
         <p className="font-medium text-sm">Peer ranking</p>
-        <p className="mt-0.5 text-muted-foreground text-xs">Average position across anonymous reviews. Lower is better.</p>
+        <p className="mt-0.5 text-muted-foreground text-xs">
+          Average position across anonymous reviews{(agg.round ?? 1) > 1 ? ` of revision ${(agg.round ?? 1) - 1}` : ""}. Lower is better. Each model's vote for its own answer is ignored.
+        </p>
+        <div className="mt-3 grid grid-cols-2 gap-2">
+          <Stat label="Agreement" value={`${agreementPct}%`} hint="Reviewers whose top pick (other than themselves) matched the winner" />
+          <Stat label="Self-votes ignored" value={`${agg.selfPreferred ?? 0} of ${reviews.length}`} hint="Models that ranked their own answer first, even though it was anonymized" />
+        </div>
         <div className="mt-3 flex flex-col gap-2">
           {authors.map((a, i) => {
             const strength = a.votes ? (n - a.averageRank + 1) / n : 0;
@@ -204,7 +241,7 @@ function Agreement({ turn }: { turn: Turn }) {
 
       <div>
         <p className="font-medium text-sm">Who ranked whom</p>
-        <p className="mt-0.5 text-muted-foreground text-xs">Rows are reviewers, columns are the answers they ranked. Outlined cells are a model rating its own answer.</p>
+        <p className="mt-0.5 text-muted-foreground text-xs">Rows are reviewers, columns are the answers they ranked. Outlined cells are a model rating its own answer; those votes don't count.</p>
         <div className="mt-3 overflow-x-auto">
           <table className="border-separate border-spacing-1 text-xs">
             <thead>
@@ -256,6 +293,15 @@ function Agreement({ turn }: { turn: Turn }) {
           {turn.council.chairman.label} read every opinion and review to write the final synthesis and brief.
         </span>
       </div>
+    </div>
+  );
+}
+
+function Stat({ label, value, hint }: { label: string; value: string; hint: string }) {
+  return (
+    <div className="rounded-xl bg-muted px-3 py-2.5" title={hint}>
+      <p className="text-2xs text-muted-foreground">{label}</p>
+      <p className="mt-0.5 font-semibold tabular-nums">{value}</p>
     </div>
   );
 }

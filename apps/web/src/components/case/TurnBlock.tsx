@@ -28,6 +28,12 @@ export function TurnBlock({
       {turn.clarification && <Intake conversationId={conversationId} turn={turn} />}
       {turn.clarification?.answer !== undefined || !turn.clarification ? <CouncilProgress turn={turn} onOpenPanel={onOpenPanel} /> : null}
       {turn.brief && <BriefCard conversationId={conversationId} turn={turn} brief={turn.brief} hermesConfigured={hermesConfigured} />}
+      {!turn.brief && turn.briefError && (
+        <p className="fade-in flex items-start gap-2.5 rounded-2xl bg-warning-surface px-4 py-3 text-sm text-warning-foreground">
+          <TriangleAlert className="mt-0.5 size-4 shrink-0" />
+          {turn.briefError}
+        </p>
+      )}
       {turn.synthesis ? <FullOpinion turn={turn} defaultOpen={!turn.brief && turn.status === "completed"} /> : turn.status === "running" && <StreamingOpinion turn={turn} />}
       {turn.status === "failed" && (
         <div className="fade-in flex items-start gap-3 rounded-2xl bg-error-surface px-4 py-3 text-sm">

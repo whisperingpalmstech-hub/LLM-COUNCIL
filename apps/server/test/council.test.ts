@@ -38,6 +38,8 @@ function setup(options: { dbPath?: string; providers?: Provider[] } = {}) {
 }
 
 const council = (overrides: Partial<CouncilConfig> = {}): CouncilConfig => ({
+  auto: false,
+  depth: "quick",
   members: [
     { id: "a", label: "Alpha", provider: "mock", model: "alpha" },
     { id: "b", label: "Beta", provider: "mock", model: "beta" },
@@ -55,19 +57,23 @@ test("parseRanking reads the FINAL RANKING section and ignores invalid or duplic
   assert.deepEqual(parseRanking(text, ["Response A", "Response B", "Response C"]), ["Response C", "Response A"]);
 });
 
-test("aggregateRankings averages positions and sorts best first", () => {
-  const responses = ["x", "y"].map((id) => ({ memberId: id, label: id.toUpperCase(), model: "m", text: "t", ms: 1 }));
-  const labelled = assignLabels(responses);
+test("aggregateRankings ignores each reviewer's vote for itself and measures agreement", () => {
+  const responses = ["x", "y", "z"].map((id) => ({ round: 1, memberId: id, label: id.toUpperCase(), model: "m", text: "t", ms: 1 }));
+  const labelled = assignLabels(responses); // A=x, B=y, C=z
   const result = aggregateRankings(
     [
-      { memberId: "x", label: "X", text: "", ranking: ["Response B", "Response A"] },
-      { memberId: "y", label: "Y", text: "", ranking: ["Response B", "Response A"] }
+      { round: 1, memberId: "x", label: "X", text: "", ranking: ["Response A", "Response B", "Response C"] }, // self first, then y
+      { round: 1, memberId: "y", label: "Y", text: "", ranking: ["Response B", "Response A", "Response C"] }, // self first, then x
+      { round: 1, memberId: "z", label: "Z", text: "", ranking: ["Response C", "Response B", "Response A"] } // self first, then y
     ],
-    labelled
+    labelled,
+    2
   );
-  assert.equal(result.rankings[0].memberId, "y");
+  assert.equal(result.round, 2);
+  assert.equal(result.selfPreferred, 3);
+  assert.equal(result.rankings[0].memberId, "y", "y is the best answer once self-votes are removed");
   assert.equal(result.rankings[0].averageRank, 1);
-  assert.deepEqual(result.labelToMemberId, { "Response A": "x", "Response B": "y" });
+  assert.equal(result.agreement, 1, "both reviewers who could vote for y did");
 });
 
 test("normalizeBrief keeps the mode's sections in order and drops empty ones", () => {
@@ -88,7 +94,7 @@ test("a full turn runs all three stages and a plan, recorded as events", async (
   const { engine, store } = setup();
   engine.saveCouncil(council());
   const id = engine.createConversation();
-  engine.sendMessage(id, "Should we migrate our monolith to services this year given a team of six engineers?");
+  await engine.sendMessage(id, "Should we migrate our monolith to services this year given a team of six engineers?");
   await engine.idle();
 
   const conversation = store.require(id);
@@ -110,12 +116,12 @@ test("clarify pauses the turn until the user answers, and the answer reaches the
   const { engine, store } = setup();
   engine.saveCouncil(council({ clarify: true }));
   const id = engine.createConversation();
-  engine.sendMessage(id, "Should I hire?");
+  await engine.sendMessage(id, "Should I hire?");
   await engine.idle();
   let turn = store.require(id).turns[0];
   assert.equal(turn.status, "awaiting_clarification");
   assert.ok(turn.clarification?.question);
-  assert.throws(() => engine.sendMessage(id, "another"), /still working/);
+  await assert.rejects(() => engine.sendMessage(id, "another"), /still working/);
 
   engine.answerClarification(id, "Success means shipping v2 by March with a team of four.");
   await engine.idle();
@@ -137,7 +143,7 @@ test("a failing member is reported but does not sink the turn", async () => {
     })
   );
   const id = engine.createConversation();
-  engine.sendMessage(id, "A sufficiently detailed question about pricing strategy for a B2B SaaS product launch.");
+  await engine.sendMessage(id, "A sufficiently detailed question about pricing strategy for a B2B SaaS product launch.");
   await engine.idle();
   const turn = store.require(id).turns[0];
   assert.equal(turn.status, "completed", turn.error);
@@ -150,7 +156,7 @@ test("when every member fails the turn fails with the reasons", async () => {
   const { engine, store } = setup({ providers: [new MockProvider(), new FailingProvider()] });
   engine.saveCouncil(council({ members: [{ id: "bad", label: "Broken", provider: "openai", model: "" }] }));
   const id = engine.createConversation();
-  engine.sendMessage(id, "Anything at all, long enough to skip clarification by the mock provider.");
+  await engine.sendMessage(id, "Anything at all, long enough to skip clarification by the mock provider.");
   await engine.idle();
   const turn = store.require(id).turns[0];
   assert.equal(turn.status, "failed");
@@ -163,7 +169,7 @@ test("the projection rebuilt from the database matches the live one; interrupted
   const first = setup({ dbPath });
   first.engine.saveCouncil(council());
   const id = first.engine.createConversation("Replay");
-  first.engine.sendMessage(id, "A long enough question to be answered straight away by the mock council.");
+  await first.engine.sendMessage(id, "A long enough question to be answered straight away by the mock council.");
   await first.engine.idle();
   first.store.append({ type: "turn.started", conversationId: id, turnId: "stuck", prompt: "stuck", mode: "general", council: council() });
   const live = first.store.require(id);
@@ -189,7 +195,7 @@ test("cancel stops a running turn", async () => {
   });
   engine.saveCouncil(council());
   const id = engine.createConversation();
-  engine.sendMessage(id, "A long enough question to be answered straight away by the mock council.");
+  await engine.sendMessage(id, "A long enough question to be answered straight away by the mock council.");
   engine.cancel(id);
   await engine.idle();
   const turn = store.require(id).turns[0];
@@ -233,7 +239,7 @@ test("a straggler is cut off once the rest of the council has answered", async (
   engine.saveCouncil(council({ members: [...council().members, { id: "slow", label: "Slow", provider: "gemini", model: "" }] }));
   const id = engine.createConversation();
   const started = Date.now();
-  engine.sendMessage(id, "A long enough question to be answered straight away by the mock council.");
+  await engine.sendMessage(id, "A long enough question to be answered straight away by the mock council.");
   await engine.idle();
   const turn = store.require(id).turns[0];
   assert.equal(turn.status, "completed", turn.error);
@@ -247,11 +253,11 @@ test("follow-up turns see earlier clarifying answers", async () => {
   const { engine, store } = setup();
   engine.saveCouncil(council({ clarify: true }));
   const id = engine.createConversation();
-  engine.sendMessage(id, "Should I hire?");
+  await engine.sendMessage(id, "Should I hire?");
   await engine.idle();
   engine.answerClarification(id, "We are a 12-person B2B SaaS company.");
   await engine.idle();
-  engine.sendMessage(id, "And what about contractors versus full-time employees for this?");
+  await engine.sendMessage(id, "And what about contractors versus full-time employees for this?");
   await engine.idle();
   const turns = store.require(id).turns;
   assert.match(buildContext(turns[1], turns.slice(0, 1)).history, /12-person B2B SaaS/);
@@ -261,7 +267,7 @@ test("a medical case uses the medical council and brief sections", async () => {
   const { engine, store } = setup();
   engine.saveCouncil(council());
   const id = engine.createConversation(undefined, "medical");
-  engine.sendMessage(id, "58M, 3 days of fever, productive cough, right basal crackles, SpO2 93% on air. CRP 140.");
+  await engine.sendMessage(id, "58M, 3 days of fever, productive cough, right basal crackles, SpO2 93% on air. CRP 140.");
   await engine.idle();
   const turn = store.require(id).turns[0];
   assert.equal(turn.mode, "medical");
@@ -274,10 +280,89 @@ test("answers and the synthesis stream as drafts; the brief is built alongside t
   const keys = new Set<string>();
   store.subscribeDrafts((d) => keys.add(d.key));
   const id = engine.createConversation(undefined, "code");
-  engine.sendMessage(id, "Is it safe to run UPDATE orders SET status='paid' WHERE payment_id IS NOT NULL on a 40M row table?");
+  await engine.sendMessage(id, "Is it safe to run UPDATE orders SET status='paid' WHERE payment_id IS NOT NULL on a 40M row table?");
   await engine.idle();
   const turn = store.require(id).turns[0];
   assert.equal(turn.status, "completed", turn.error);
   assert.ok(keys.has("stage1:a") && keys.has("stage1:c") && keys.has("synthesis"), [...keys].join(","));
   assert.deepEqual(turn.brief?.sections.map((s) => s.title), ["Bugs & risks", "Recommended changes", "Alternatives"]);
+});
+
+/** Records every request so tests can inspect prompts and images. */
+class RecordingProvider extends MockProvider {
+  requests: CompletionRequest[] = [];
+  override async complete(request: CompletionRequest): Promise<string> {
+    this.requests.push(request);
+    return super.complete(request);
+  }
+}
+
+test("standard depth runs answer, review, revise, review, verdict (5 rounds)", async () => {
+  const { engine, store } = setup();
+  engine.saveCouncil(council({ depth: "standard" }));
+  const id = engine.createConversation();
+  await engine.sendMessage(id, "A long enough question to be answered straight away by the mock council.");
+  await engine.idle();
+  const turn = store.require(id).turns[0];
+  assert.equal(turn.status, "completed", turn.error);
+  assert.equal(turn.rounds, 5);
+  assert.notEqual(turn.convergedEarly, true, "standard always does its one revision round");
+  assert.deepEqual([...new Set(turn.stage1.map((r) => r.round))], [1, 2]);
+  assert.deepEqual([...new Set(turn.stage2.map((r) => r.round))], [1, 2]);
+  assert.equal(turn.aggregate?.round, 2);
+});
+
+test("thorough depth stops early when reviewers already agree", async () => {
+  // Every mock reviewer ranks identically when the model names are equal, so the council converges.
+  const { engine, store } = setup();
+  engine.saveCouncil(
+    council({
+      depth: "thorough",
+      members: [
+        { id: "a", label: "A", provider: "mock", model: "same" },
+        { id: "b", label: "B", provider: "mock", model: "same" },
+        { id: "c", label: "C", provider: "mock", model: "same" }
+      ]
+    })
+  );
+  const id = engine.createConversation();
+  await engine.sendMessage(id, "A long enough question to be answered straight away by the mock council.");
+  await engine.idle();
+  const turn = store.require(id).turns[0];
+  assert.equal(turn.rounds, 7);
+  assert.equal(turn.convergedEarly, true);
+  assert.equal(Math.max(...turn.stage1.map((r) => r.round)), 2, "always revises once, then stops instead of a second revision");
+  assert.ok(turn.brief);
+});
+
+test("every prompt carries today's date and the user's profile; images reach the models", async () => {
+  const recorder = new RecordingProvider();
+  const db = openDatabase(":memory:");
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "synod-img-"));
+  fs.writeFileSync(path.join(dir, "scan.png"), Buffer.from("fake-png"));
+  const store = new EventStore(db);
+  const engine = new CouncilEngine({ store, providers: new ProviderRegistry([recorder], { maxRetries: 0 }), settings: new Settings(db), search: new WebSearch({}), obsidianVaultPath: null, uploadsDir: dir });
+  engine.saveCouncil(council());
+  const id = engine.createConversation(undefined, "medical");
+  store.append({ type: "attachment.added", conversationId: id, attachment: { id: "f", name: "scan.png", mimeType: "image/png", size: 8, url: "/uploads/scan.png", source: "upload", kind: "image" } });
+  await engine.sendMessage(id, "What does this chest film show? 61M smoker, 6 weeks of cough.", {
+    timezone: "Europe/London",
+    profile: { profession: "clinician", specialty: "radiology", country: "United Kingdom", answerStyle: "concise" }
+  });
+  await engine.idle();
+  const answer = recorder.requests.find((r) => r.purpose === "answer")!;
+  assert.match(answer.messages[0].content, /Today is \w+day,? \d+ \w+ \d{4} \(Europe\/London\)/);
+  assert.match(answer.messages[0].content, /clinician \(radiology\).*United Kingdom.*guidelines/s);
+  assert.equal(answer.messages[0].images?.[0].data, Buffer.from("fake-png").toString("base64"));
+  fs.rmSync(dir, { recursive: true, force: true });
+});
+
+test("an auto case is routed to the right mode from its first message", async () => {
+  const { engine, store } = setup();
+  engine.saveCouncil(council());
+  const id = engine.createConversation(undefined, "auto");
+  await engine.sendMessage(id, "The other party breached clause 7 of our supply contract. Can we sue for lost profits?");
+  await engine.idle();
+  assert.equal(store.require(id).mode, "legal");
+  assert.equal(store.require(id).turns[0].mode, "legal");
 });

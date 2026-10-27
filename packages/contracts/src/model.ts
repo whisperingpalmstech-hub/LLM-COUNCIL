@@ -26,7 +26,22 @@ export interface CouncilMember {
   model: string;
 }
 
+/**
+ * How long the council deliberates. Rounds: answer → review → [revise → review]* → verdict.
+ * quick = 3 rounds, standard = 5, thorough = 7.
+ */
+export const DEPTHS = ["quick", "standard", "thorough"] as const;
+export type Depth = (typeof DEPTHS)[number];
+export const DEPTH_ROUNDS: Record<Depth, number> = { quick: 3, standard: 5, thorough: 7 };
+/** Answer/review cycles implied by a depth: quick 1, standard 2, thorough 3. */
+export function depthCycles(depth: Depth): number {
+  return (DEPTH_ROUNDS[depth] - 1) / 2;
+}
+
 export interface CouncilConfig {
+  /** Pick the best council for each case type automatically (members and chairman below are ignored). */
+  auto: boolean;
+  depth: Depth;
   members: CouncilMember[];
   /** Member that writes the final synthesis and the execution plan. May or may not also sit on the council. */
   chairman: CouncilMember;
@@ -45,8 +60,10 @@ export interface Attachment {
   size: number;
   url: string;
   source: "upload" | "mobile";
-  /** Text content made available to the council (text-like files only, truncated). */
+  /** Text content made available to the council (text, PDF, and Word files; truncated). */
   excerpt?: string;
+  /** Images are shown to the models directly. */
+  kind?: "text" | "document" | "image" | "other";
 }
 
 export interface SearchResult {
@@ -56,6 +73,8 @@ export interface SearchResult {
 }
 
 export interface Stage1Response {
+  /** 1 for the first answer; 2+ for revisions after peer review. */
+  round: number;
   memberId: string;
   label: string;
   model: string;
@@ -65,6 +84,8 @@ export interface Stage1Response {
 }
 
 export interface Stage2Review {
+  /** Which answer round this review ranked. */
+  round: number;
   memberId: string;
   label: string;
   text: string;
@@ -81,9 +102,15 @@ export interface AggregateRank {
 }
 
 export interface Stage2Aggregate {
+  round: number;
   /** Anonymous label -> member id. Revealed only after every review is in. */
   labelToMemberId: Record<string, string>;
+  /** Averages exclude each reviewer's vote for its own answer. */
   rankings: AggregateRank[];
+  /** Share of reviewers whose top pick (excluding themselves) matches the overall winner, 0-1. */
+  agreement: number;
+  /** Reviews that put their own answer first (ignored in the averages). */
+  selfPreferred: number;
 }
 
 export interface Synthesis {
@@ -120,7 +147,10 @@ export interface Brief {
   bottomLine: string;
   /** Short label, e.g. "Likely community-acquired pneumonia", "Strong claim", "Do not merge". */
   verdict: string;
+  /** The chairman's own estimate, 0-1. */
   confidence: number;
+  /** Measured agreement among peer reviewers, 0-1 (null when there was no review). */
+  agreement: number | null;
   consensus: string[];
   disagreements: { point: string; positions: string[] }[];
   redFlags: string[];
@@ -138,7 +168,27 @@ export interface HandoffResult {
   at: string;
 }
 
-export type TurnStage = "clarify" | "research" | "stage1" | "stage2" | "stage3" | "brief";
+export type TurnStage = "clarify" | "research" | "stage1" | "stage2" | "revise" | "stage3" | "brief";
+
+export const PROFESSIONS = ["clinician", "lawyer", "engineer", "executive", "other"] as const;
+export type Profession = (typeof PROFESSIONS)[number];
+
+/** What the user told us at onboarding; added to every case as context. */
+export interface UserProfile {
+  profession: Profession;
+  specialty: string;
+  country: string;
+  region?: string;
+  setting?: string;
+  answerStyle: "concise" | "detailed";
+}
+
+/** Snapshot of the context a turn was decided with (kept for audit). */
+export interface CaseContext {
+  date: string;
+  timezone?: string;
+  profile?: UserProfile;
+}
 
 export type TurnStatus = "running" | "awaiting_clarification" | "completed" | "failed";
 
@@ -152,13 +202,22 @@ export interface Turn {
   /** When the current stage started (drives live timers). */
   stageStartedAt?: string;
   council: CouncilConfig;
+  /** Planned rounds (3, 5, or 7) and the revise/review cycle currently running. */
+  rounds: number;
+  cycle: number;
+  /** Stopped before the planned rounds because reviewers already agreed. */
+  convergedEarly?: boolean;
+  context?: CaseContext;
   clarification?: { question: string; answer?: string };
   research: SearchResult[];
   stage1: Stage1Response[];
   stage2: Stage2Review[];
+  /** Latest review round's combined ranking. */
   aggregate?: Stage2Aggregate;
   synthesis?: Synthesis;
   brief?: Brief;
+  /** Why the brief is missing, when the chairman couldn't produce it. */
+  briefError?: string;
   handoff?: HandoffResult;
   error?: string;
   startedAt: string;
@@ -170,6 +229,8 @@ export interface AuthUser {
   email: string;
   name: string;
   role: "admin" | "member";
+  /** Null until onboarding is complete. */
+  profile: UserProfile | null;
 }
 
 /** How new accounts can be created on this server. */
@@ -181,6 +242,8 @@ export interface Conversation {
   ownerId?: string;
   title: string;
   mode: CaseMode;
+  /** The mode is picked automatically from the first message. */
+  autoMode?: boolean;
   archived: boolean;
   createdAt: string;
   updatedAt: string;

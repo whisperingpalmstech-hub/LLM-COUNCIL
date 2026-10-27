@@ -1,16 +1,37 @@
 import crypto from "node:crypto";
-import { CASE_MODES, PROVIDER_IDS, type CaseMode, type CouncilConfig, type CouncilMember, type Stage1Response, type Stage2Review, type Turn } from "@synod/contracts";
+import fs from "node:fs/promises";
+import path from "node:path";
+import {
+  CASE_MODES,
+  DEPTH_ROUNDS,
+  DEPTHS,
+  PROVIDER_IDS,
+  depthCycles,
+  type CaseContext,
+  type CaseMode,
+  type CouncilConfig,
+  type CouncilMember,
+  type Depth,
+  type Stage1Response,
+  type Stage2Review,
+  type Turn,
+  type UserProfile
+} from "@synod/contracts";
 import type { Settings } from "../db/database.ts";
 import type { EventStore } from "../events/store.ts";
 import { writeTurnToVault } from "../integrations/obsidian.ts";
 import type { WebSearch } from "../integrations/search.ts";
 import { errorMessage } from "../providers/http.ts";
 import type { ProviderRegistry } from "../providers/registry.ts";
+import type { ImageInput } from "../providers/types.ts";
 import { extractJson, normalizeBrief } from "./brief.ts";
-import { answerSystem, briefPrompt, buildContext, clarifyPrompt, questionBlock, reviewPrompt, synthesisPrompt, type TurnContext } from "./prompts.ts";
+import { answerSystem, briefPrompt, buildContext, clarifyPrompt, classifyPrompt, questionBlock, revisePrompt, reviewPrompt, synthesisPrompt, type TurnContext } from "./prompts.ts";
 import { aggregateRankings, assignLabels, parseRanking } from "./ranking.ts";
+import { CLASSIFIER, RECIPES } from "./recipes.ts";
 
 const COUNCIL_SETTING = "council";
+const MAX_IMAGES = 4;
+const MAX_IMAGE_BYTES = 5 * 1024 * 1024;
 
 export interface EngineDeps {
   store: EventStore;
@@ -18,18 +39,29 @@ export interface EngineDeps {
   settings: Settings;
   search: WebSearch;
   obsidianVaultPath: string | null;
+  /** Where attachments live, so images can be shown to the models. */
+  uploadsDir?: string;
   env?: Record<string, string | undefined>;
   /** Minimum time the last straggler gets after everyone else has finished a stage. */
   stragglerGraceMs?: number;
 }
 
+export interface SendOptions {
+  override?: Partial<CouncilConfig>;
+  depth?: Depth;
+  timezone?: string;
+  profile?: UserProfile | null;
+  userId?: string;
+}
+
 /**
- * The orchestration layer. Commands come in (send, answer, cancel); the engine
- * runs the council pipeline and records every step as an event:
+ * The orchestration layer. Commands come in (send, answer, cancel); the engine runs
+ * the council and records every step as an event:
  *
- *   clarify? → research? → stage 1 (independent answers, parallel)
- *            → stage 2 (anonymized peer ranking, parallel) → stage 3 (chairman synthesis)
- *            → execution plan?
+ *   classify? → clarify? → research?
+ *   → round 1: independent answers → round 2: anonymous peer review
+ *   → [round 3: revise after critique → round 4: review again]×(depth)   (stops early on consensus)
+ *   → final round: chairman verdict (synthesis + brief, in parallel)
  *
  * The engine holds no conversation state of its own; it reads projections from the store.
  */
@@ -43,25 +75,49 @@ export class CouncilEngine {
 
   // ---- council configuration -------------------------------------------------
 
-  council(): CouncilConfig {
-    const saved = this.deps.settings.get<CouncilConfig>(COUNCIL_SETTING);
+  /** A user's council settings, falling back to the server default. */
+  council(userId?: string): CouncilConfig {
+    const saved = (userId && this.deps.settings.get<CouncilConfig>(`${COUNCIL_SETTING}:${userId}`)) || this.deps.settings.get<CouncilConfig>(COUNCIL_SETTING);
     // Re-validate so councils saved by older versions pick up new defaults.
     if (saved?.members?.length) return validateCouncil(saved);
     const { members, chairman } = this.deps.providers.defaultCouncil(this.deps.env);
-    return { members, chairman, clarify: true, brief: true, webSearch: Boolean(this.deps.search.provider()) };
+    return { auto: this.autoAvailable(), depth: "standard", members, chairman, clarify: true, brief: true, webSearch: Boolean(this.deps.search.provider()) };
   }
 
-  saveCouncil(input: CouncilConfig): CouncilConfig {
+  saveCouncil(input: CouncilConfig, userId?: string): CouncilConfig {
     const config = validateCouncil(input);
-    this.deps.settings.set(COUNCIL_SETTING, config);
+    this.deps.settings.set(userId ? `${COUNCIL_SETTING}:${userId}` : COUNCIL_SETTING, config);
     return config;
+  }
+
+  /** Recommended councils need OpenRouter, which reaches every lab with one key. */
+  autoAvailable(): boolean {
+    try {
+      return this.deps.providers.get("openrouter").configured();
+    } catch {
+      return false;
+    }
+  }
+
+  /** The concrete members and chairman for a case type. */
+  resolve(config: CouncilConfig, mode: CaseMode): CouncilConfig {
+    if (!config.auto || !this.autoAvailable()) return config;
+    return { ...config, ...RECIPES[mode] };
   }
 
   // ---- commands --------------------------------------------------------------
 
-  createConversation(title?: string, mode: CaseMode = "general", ownerId?: string): string {
+  createConversation(title?: string, mode: CaseMode | "auto" = "general", ownerId?: string): string {
     const conversationId = crypto.randomUUID();
-    this.deps.store.append({ type: "conversation.created", conversationId, title: cleanTitle(title) || "New conversation", mode: validMode(mode), ...(ownerId ? { ownerId } : {}) });
+    const auto = mode === "auto";
+    this.deps.store.append({
+      type: "conversation.created",
+      conversationId,
+      title: cleanTitle(title) || "New conversation",
+      mode: auto ? "general" : validMode(mode),
+      ...(auto ? { autoMode: true } : {}),
+      ...(ownerId ? { ownerId } : {})
+    });
     return conversationId;
   }
 
@@ -71,21 +127,31 @@ export class CouncilEngine {
     if (next !== conversation.mode) this.deps.store.append({ type: "conversation.mode_changed", conversationId, mode: next });
   }
 
-  sendMessage(conversationId: string, prompt: string, override?: Partial<CouncilConfig>): string {
-    const conversation = this.deps.store.require(conversationId);
+  async sendMessage(conversationId: string, prompt: string, options: SendOptions = {}): Promise<string> {
+    let conversation = this.deps.store.require(conversationId);
     const text = prompt.trim();
     if (!text) throw badRequest("Message is required.");
-    if (text.length > 20_000) throw badRequest("Message must be 20,000 characters or fewer.");
+    if (text.length > 40_000) throw badRequest("Message must be 40,000 characters or fewer.");
     const active = conversation.turns.at(-1);
     if (active && (active.status === "running" || active.status === "awaiting_clarification")) {
       throw Object.assign(new Error("The council is still working on the previous message."), { status: 409 });
     }
-    const council = override ? validateCouncil({ ...this.council(), ...override }) : this.council();
+    // Route an "auto" case to the right mode from its first message.
+    if (conversation.autoMode && !conversation.turns.length) {
+      const mode = await this.classify(text);
+      this.setMode(conversationId, mode);
+      conversation = this.deps.store.require(conversationId);
+    }
+    const base = this.council(options.userId);
+    const merged = options.override ? validateCouncil({ ...base, ...options.override }) : base;
+    const depth = options.depth && DEPTHS.includes(options.depth) ? options.depth : merged.depth;
+    const council = { ...this.resolve(merged, conversation.mode), depth };
+    const context: CaseContext = { date: todayIn(options.timezone), ...(options.timezone ? { timezone: options.timezone } : {}), ...(options.profile ? { profile: options.profile } : {}) };
     const turnId = crypto.randomUUID();
     if (!conversation.turns.length && conversation.title === "New conversation") {
       this.deps.store.append({ type: "conversation.renamed", conversationId, title: cleanTitle(text) });
     }
-    this.deps.store.append({ type: "turn.started", conversationId, turnId, prompt: text, mode: conversation.mode, council });
+    this.deps.store.append({ type: "turn.started", conversationId, turnId, prompt: text, mode: conversation.mode, council, rounds: DEPTH_ROUNDS[depth], context });
     this.launch(conversationId, turnId);
     return turnId;
   }
@@ -148,20 +214,22 @@ export class CouncilEngine {
   private async run(conversationId: string, turnId: string, signal: AbortSignal): Promise<void> {
     const { store, providers, search } = this.deps;
     const emit = store.append.bind(store);
-    const stage = (s: Turn["stage"] & string) => emit({ type: "turn.stage_started", conversationId, turnId, stage: s });
+    const stage = (s: Turn["stage"] & string, cycle?: number) => emit({ type: "turn.stage_started", conversationId, turnId, stage: s, ...(cycle ? { cycle } : {}) });
     const context = (): TurnContext => {
       const conversation = store.require(conversationId);
       const index = conversation.turns.findIndex((t) => t.id === turnId);
       return buildContext(conversation.turns[index], conversation.turns.slice(0, index));
     };
+    const draft = (key: string) => throttle((text: string) => store.publishDraft({ type: "draft", conversationId, turnId, key, text }), 120);
     let turn = this.turn(conversationId, turnId);
     const { members, chairman } = turn.council;
     const mode = turn.mode;
+    const images = await this.images(turn);
 
-    // 0. Clarify — pause the turn and wait for the user if one question is essential.
+    // Clarify: pause the turn and wait for the user if one question is essential.
     if (turn.council.clarify && !turn.clarification) {
       stage("clarify");
-      const question = await this.clarifyingQuestion(chairman, context(), mode, signal);
+      const question = await this.clarifyingQuestion(chairman, context(), mode, signal, images);
       if (signal.aborted) return;
       if (question) {
         emit({ type: "turn.clarification_requested", conversationId, turnId, question });
@@ -181,70 +249,96 @@ export class CouncilEngine {
     }
     if (signal.aborted) return;
 
-    // 1. Independent answers.
-    stage("stage1");
-    const question = questionBlock(context());
-    const draft = (key: string) => throttle((text: string) => store.publishDraft({ type: "draft", conversationId, turnId, key, text }), 120);
-    await withStragglerCutoff(
-      members,
-      signal,
-      this.deps.stragglerGraceMs,
-      async (member, memberSignal) => {
+    const cycles = Math.max(1, (turn.rounds - 1) / 2);
+    let seated = members;
+    for (let cycle = 1; cycle <= cycles; cycle++) {
+      // Answer (cycle 1) or revise after critique (later cycles).
+      stage(cycle === 1 ? "stage1" : "revise", cycle);
+      const ctx = context();
+      const previous = this.turn(conversationId, turnId);
+      const prevAnswers = previous.stage1.filter((r) => r.round === cycle - 1 && !r.error);
+      const prevLabelled = assignLabels(prevAnswers);
+      const prevReviews = previous.stage2.filter((r) => r.round === cycle - 1 && !r.error);
+      await withStragglerCutoff(seated, signal, this.deps.stragglerGraceMs, async (member, memberSignal) => {
         const started = Date.now();
         let response: Stage1Response;
         try {
-          const text = await providers.complete(member, { purpose: "answer", system: answerSystem(mode), messages: [{ role: "user", content: question }], signal: memberSignal, onText: draft(`stage1:${member.id}`) });
-          response = { memberId: member.id, label: member.label, model: modelName(member), text, ms: Date.now() - started };
+          const content =
+            cycle === 1
+              ? questionBlock(ctx)
+              : revisePrompt(
+                  ctx,
+                  prevLabelled.map((l) => ({ label: l.label, text: l.response.text })),
+                  prevLabelled.find((l) => l.response.memberId === member.id)?.label ?? "",
+                  prevReviews
+                );
+          const text = await providers.complete(member, {
+            purpose: "answer",
+            system: answerSystem(mode),
+            messages: [{ role: "user", content, images }],
+            signal: memberSignal,
+            onText: draft(`stage1:${member.id}`)
+          });
+          response = { round: cycle, memberId: member.id, label: member.label, model: modelName(member), text, ms: Date.now() - started };
         } catch (error) {
-          response = { memberId: member.id, label: member.label, model: modelName(member), text: "", error: memberError(error, memberSignal), ms: Date.now() - started };
+          response = { round: cycle, memberId: member.id, label: member.label, model: modelName(member), text: "", error: memberError(error, memberSignal), ms: Date.now() - started };
         }
         if (!signal.aborted) emit({ type: "turn.stage1_response", conversationId, turnId, response });
-      }
-    );
-    if (signal.aborted) return;
-    turn = this.turn(conversationId, turnId);
-    const answered = turn.stage1.filter((r) => !r.error);
-    if (!answered.length) throw new Error(`No council member could answer: ${turn.stage1.map((r) => `${r.label}: ${r.error}`).join("; ")}`);
+      });
+      if (signal.aborted) return;
 
-    // 2. Anonymized peer review. Skipped when only one member answered.
-    const labelled = assignLabels(answered);
-    if (labelled.length > 1) {
-      stage("stage2");
+      turn = this.turn(conversationId, turnId);
+      const answered = turn.stage1.filter((r) => r.round === cycle && !r.error);
+      if (!answered.length) {
+        if (cycle === 1) throw new Error(`No council member could answer: ${turn.stage1.map((r) => `${r.label}: ${r.error}`).join("; ")}`);
+        break; // Keep the previous round's answers for the verdict.
+      }
+      seated = seated.filter((m) => answered.some((r) => r.memberId === m.id));
+
+      // Anonymous peer review. Skipped when only one member answered.
+      const labelled = assignLabels(answered);
+      if (labelled.length < 2) break;
+      stage("stage2", cycle);
       const prompt = reviewPrompt(context(), labelled.map((l) => ({ label: l.label, text: l.response.text })));
       const validLabels = labelled.map((l) => l.label);
-      const reviewers = members.filter((m) => answered.some((r) => r.memberId === m.id));
-      await withStragglerCutoff(
-        reviewers,
-        signal,
-        this.deps.stragglerGraceMs,
-        async (member, memberSignal) => {
-          let review: Stage2Review;
-          try {
-            const text = await providers.complete(member, { purpose: "review", messages: [{ role: "user", content: prompt }], signal: memberSignal });
-            review = { memberId: member.id, label: member.label, text, ranking: parseRanking(text, validLabels) };
-          } catch (error) {
-            review = { memberId: member.id, label: member.label, text: "", ranking: [], error: memberError(error, memberSignal) };
-          }
-          if (!signal.aborted) emit({ type: "turn.stage2_review", conversationId, turnId, review });
+      await withStragglerCutoff(seated, signal, this.deps.stragglerGraceMs, async (member, memberSignal) => {
+        let review: Stage2Review;
+        try {
+          const text = await providers.complete(member, { purpose: "review", messages: [{ role: "user", content: prompt }], signal: memberSignal });
+          review = { round: cycle, memberId: member.id, label: member.label, text, ranking: parseRanking(text, validLabels) };
+        } catch (error) {
+          review = { round: cycle, memberId: member.id, label: member.label, text: "", ranking: [], error: memberError(error, memberSignal) };
         }
-      );
+        if (!signal.aborted) emit({ type: "turn.stage2_review", conversationId, turnId, review });
+      });
       if (signal.aborted) return;
       turn = this.turn(conversationId, turnId);
-      emit({ type: "turn.stage2_aggregated", conversationId, turnId, aggregate: aggregateRankings(turn.stage2.filter((r) => !r.error), labelled) });
+      const aggregate = aggregateRankings(turn.stage2.filter((r) => r.round === cycle && !r.error), labelled, cycle);
+      emit({ type: "turn.stage2_aggregated", conversationId, turnId, aggregate });
+
+      // Consensus: every reviewer independently picked the same best answer. Always do at least one
+      // revision after critique (agreeing on the best answer doesn't mean its errors were fixed),
+      // then stop early once the revised answers are unanimously ranked.
+      if (cycle >= 2 && cycle < cycles && aggregate.agreement === 1 && aggregate.rankings.length > 1) {
+        emit({ type: "turn.converged", conversationId, turnId, cycle });
+        break;
+      }
     }
 
-    // 3. Chairman synthesis and the structured brief, in parallel: both read the
-    //    same answers and critiques, so neither has to wait for the other.
+    // Final round: the chairman's verdict, from the latest answers and reviews.
     stage("stage3");
     turn = this.turn(conversationId, turnId);
-    const reviews = turn.stage2.filter((r) => !r.error);
-    const ranking = (turn.aggregate?.rankings ?? []).map((r) => r.label).join(" > ");
+    const lastRound = Math.max(...turn.stage1.filter((r) => !r.error).map((r) => r.round));
+    const answered = turn.stage1.filter((r) => r.round === lastRound && !r.error);
+    const reviews = turn.stage2.filter((r) => r.round === lastRound && !r.error);
+    const aggregate = turn.aggregate?.round === lastRound ? turn.aggregate : undefined;
+    const ranking = (aggregate?.rankings ?? []).map((r) => r.label).join(" > ");
 
     const synthesis = (async () => {
       try {
         const text = await providers.complete(chairman, {
           purpose: "synthesis",
-          messages: [{ role: "user", content: synthesisPrompt(context(), answered, reviews) }],
+          messages: [{ role: "user", content: synthesisPrompt(context(), answered, reviews), images }],
           signal,
           onText: draft("synthesis")
         });
@@ -252,7 +346,7 @@ export class CouncilEngine {
       } catch (error) {
         if (signal.aborted) return;
         // Degrade to the top-ranked answer rather than losing the turn.
-        const best = turn.aggregate?.rankings[0]?.memberId;
+        const best = aggregate?.rankings[0]?.memberId;
         const fallback = answered.find((r) => r.memberId === best) ?? answered[0];
         emit({
           type: "turn.synthesis_completed",
@@ -266,11 +360,13 @@ export class CouncilEngine {
     const brief = (async () => {
       if (!turn.council.brief) return;
       try {
-        const reply = await providers.complete(chairman, { purpose: "brief", json: true, messages: [{ role: "user", content: briefPrompt(context(), mode, answered, reviews, ranking) }], signal });
+        const reply = await providers.complete(chairman, { purpose: "brief", json: true, messages: [{ role: "user", content: briefPrompt(context(), mode, answered, reviews, ranking), images }], signal });
         const version = store.require(conversationId).turns.filter((t) => t.brief).length + 1;
-        if (!signal.aborted) emit({ type: "turn.brief_generated", conversationId, turnId, brief: normalizeBrief(extractJson(reply), mode, version) });
+        if (!signal.aborted) emit({ type: "turn.brief_generated", conversationId, turnId, brief: normalizeBrief(extractJson(reply), mode, version, aggregate ? aggregate.agreement : null) });
       } catch (error) {
-        if (!signal.aborted) console.warn("[council] brief generation failed:", errorMessage(error));
+        if (signal.aborted) return;
+        console.warn("[council] brief generation failed:", errorMessage(error));
+        emit({ type: "turn.brief_failed", conversationId, turnId, error: friendlyProviderError(error) });
       }
     })();
 
@@ -287,9 +383,38 @@ export class CouncilEngine {
     }
   }
 
-  private async clarifyingQuestion(chairman: CouncilMember, ctx: TurnContext, mode: CaseMode, signal: AbortSignal): Promise<string | null> {
+  /** Image attachments, read once per turn and passed to models that can see them. */
+  private async images(turn: Turn): Promise<ImageInput[] | undefined> {
+    if (!this.deps.uploadsDir) return undefined;
+    const out: ImageInput[] = [];
+    for (const a of turn.attachments.filter((a) => a.kind === "image" || a.mimeType.startsWith("image/")).slice(0, MAX_IMAGES)) {
+      if (a.size > MAX_IMAGE_BYTES) continue;
+      try {
+        const file = path.join(this.deps.uploadsDir, path.basename(decodeURIComponent(a.url.replace(/^\/uploads\//, ""))));
+        out.push({ mimeType: a.mimeType, data: (await fs.readFile(file)).toString("base64") });
+      } catch (error) {
+        console.warn("[council] could not read image", a.name, errorMessage(error));
+      }
+    }
+    return out.length ? out : undefined;
+  }
+
+  /** Pick the case type from the first message, using a small fast model. */
+  private async classify(text: string): Promise<CaseMode> {
     try {
-      const reply = await this.deps.providers.complete(chairman, { purpose: "clarify", json: true, messages: [{ role: "user", content: clarifyPrompt(ctx, mode) }], signal });
+      const member = this.autoAvailable() ? CLASSIFIER : this.council().chairman;
+      const reply = await this.deps.providers.complete(member, { purpose: "clarify", json: true, messages: [{ role: "user", content: classifyPrompt(text) }], signal: AbortSignal.timeout(15_000) });
+      const mode = (extractJson(reply) as { mode?: unknown }).mode;
+      return validMode(mode);
+    } catch (error) {
+      console.warn("[council] classification failed, using general:", errorMessage(error));
+      return "general";
+    }
+  }
+
+  private async clarifyingQuestion(chairman: CouncilMember, ctx: TurnContext, mode: CaseMode, signal: AbortSignal, images?: ImageInput[]): Promise<string | null> {
+    try {
+      const reply = await this.deps.providers.complete(chairman, { purpose: "clarify", json: true, messages: [{ role: "user", content: clarifyPrompt(ctx, mode), images }], signal });
       const parsed = extractJson(reply) as { needed?: unknown; question?: unknown };
       const question = typeof parsed.question === "string" ? parsed.question.trim() : "";
       return parsed.needed === true && question ? question.slice(0, 500) : null;
@@ -298,6 +423,24 @@ export class CouncilEngine {
       if (!signal.aborted) console.warn("[council] clarify step skipped:", errorMessage(error));
       return null;
     }
+  }
+}
+
+/** Turn provider failures into something a user can act on. */
+function friendlyProviderError(error: unknown): string {
+  const message = errorMessage(error);
+  if (/\b402\b|credits/i.test(message)) return "The model provider account is out of credit. Top up OpenRouter, then ask again.";
+  if (/\b429\b|rate/i.test(message)) return "The model provider is rate-limiting requests. Try again in a minute.";
+  return "The chairman couldn't produce the structured brief this time. The full opinion below is complete.";
+}
+
+/** Today's date in the user's timezone, e.g. "Tuesday 27 October 2026". */
+function todayIn(timezone?: string): string {
+  const format = (tz?: string) => new Intl.DateTimeFormat("en-GB", { weekday: "long", day: "numeric", month: "long", year: "numeric", timeZone: tz }).format(new Date());
+  try {
+    return format(timezone);
+  } catch {
+    return format();
   }
 }
 
@@ -368,6 +511,8 @@ function validateCouncil(input: CouncilConfig): CouncilConfig {
   if (new Set(members.map((m) => m.id)).size !== members.length) throw badRequest("Council member ids must be unique.");
   if (!input.chairman) throw badRequest("A chairman is required.");
   return {
+    auto: input.auto === true,
+    depth: DEPTHS.includes(input.depth) ? input.depth : "standard",
     members,
     chairman: validateMember(input.chairman),
     clarify: Boolean(input.clarify),
@@ -401,3 +546,5 @@ function cleanTitle(value?: string): string {
 function badRequest(message: string): Error {
   return Object.assign(new Error(message), { status: 400 });
 }
+
+export { depthCycles };

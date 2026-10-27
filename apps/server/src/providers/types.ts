@@ -2,9 +2,17 @@ import type { ProviderId } from "@synod/contracts";
 
 export type CompletionPurpose = "clarify" | "answer" | "review" | "synthesis" | "brief";
 
+export interface ImageInput {
+  mimeType: string;
+  /** Base64, no data: prefix. */
+  data: string;
+}
+
 export interface ChatMessage {
   role: "user" | "assistant";
   content: string;
+  /** Images shown alongside the text (user messages only). */
+  images?: ImageInput[];
 }
 
 export interface CompletionRequest {

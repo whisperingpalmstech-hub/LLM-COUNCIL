@@ -5,6 +5,7 @@ export type Route =
   | { name: "login" }
   | { name: "signup" }
   | { name: "new" }
+  | { name: "welcome" }
   | { name: "conversation"; id: string }
   | { name: "mobile"; id: string };
 
@@ -12,6 +13,7 @@ function parse(pathname: string): Route {
   if (pathname === "/login") return { name: "login" };
   if (pathname === "/signup") return { name: "signup" };
   if (pathname === "/new") return { name: "new" };
+  if (pathname === "/welcome") return { name: "welcome" };
   const conversation = pathname.match(/^\/c\/([\w-]+)/);
   if (conversation) return { name: "conversation", id: conversation[1] };
   const mobile = pathname.match(/^\/mobile\/([\w-]+)/);

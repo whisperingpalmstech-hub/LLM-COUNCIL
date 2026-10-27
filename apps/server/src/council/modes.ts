@@ -63,7 +63,8 @@ export const MODES: Record<CaseMode, ModeDefinition> = {
       { title: "Recommended changes", guidance: "specific changes in priority order; level = priority; detail = how" },
       { title: "Alternatives", guidance: "materially different approaches worth considering; detail = trade-off" }
     ],
-    verdictHint: "a clear call, e.g. \"Safe to merge after 2 fixes\", \"Do not run in production\", or \"Approach is sound\"",
+    verdictHint:
+      "a clear call that fits what was asked: for an action an agent or person proposes to run, \"Approve\", \"Approve with changes\", or \"Do not run\"; for code or a design under review, a judgement such as \"Safe to merge after 2 fixes\", \"Needs rework: race condition\", or \"Approach is sound\"",
     caveats: ["Review the suggested changes and test them before you rely on them."]
   },
   general: {

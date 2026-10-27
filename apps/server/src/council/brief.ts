@@ -12,7 +12,7 @@ export function extractJson(text: string): unknown {
 }
 
 /** Normalize whatever the model returned into a complete, safe Brief. */
-export function normalizeBrief(raw: unknown, mode: CaseMode, version: number): Brief {
+export function normalizeBrief(raw: unknown, mode: CaseMode, version: number, agreement: number | null = null): Brief {
   const b = obj(raw);
   const expected = MODES[mode].sections.map((s) => s.title);
   const given = list(b.sections).map(obj);
@@ -27,6 +27,7 @@ export function normalizeBrief(raw: unknown, mode: CaseMode, version: number): B
     bottomLine: str(b.bottomLine),
     verdict: str(b.verdict).slice(0, 120),
     confidence: clamp01(b.confidence),
+    agreement,
     consensus: strings(b.consensus),
     disagreements: list(b.disagreements)
       .map(obj)

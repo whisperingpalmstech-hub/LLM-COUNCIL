@@ -1,7 +1,7 @@
 import crypto from "node:crypto";
 import { promisify } from "node:util";
 import type { DatabaseSync } from "node:sqlite";
-import type { AuthUser } from "@synod/contracts";
+import { PROFESSIONS, type AuthUser, type UserProfile } from "@synod/contracts";
 
 const scrypt = promisify(crypto.scrypt) as (password: string, salt: Buffer, keylen: number, options: crypto.ScryptOptions) => Promise<Buffer>;
 const SCRYPT = { N: 16384, r: 8, p: 1, maxmem: 64 * 1024 * 1024 };
@@ -21,6 +21,8 @@ interface UserRow {
   name: string;
   password_hash: string;
   role: string;
+  profile: string | null;
+  google_sub: string | null;
 }
 
 /** Users, password hashing (scrypt), and opaque session tokens (only their SHA-256 is stored). */
@@ -39,7 +41,7 @@ export class Accounts {
     const name = input.name.trim().slice(0, 80) || email.split("@")[0];
     validatePassword(input.password);
     if (this.db.prepare("SELECT 1 FROM users WHERE email = ?").get(email)) throw new AuthError("An account with this email already exists. Sign in instead.", 409);
-    const user = { id: crypto.randomUUID(), email, name, role: input.role ?? "member" } as const;
+    const user: AuthUser = { id: crypto.randomUUID(), email, name, role: input.role ?? "member", profile: null };
     this.db
       .prepare("INSERT INTO users(id, email, name, password_hash, role, created_at) VALUES(?, ?, ?, ?, ?, ?)")
       .run(user.id, email, name, await hashPassword(input.password), user.role, new Date().toISOString());
@@ -48,9 +50,37 @@ export class Accounts {
 
   async verify(emailInput: string, password: string): Promise<AuthUser> {
     const row = this.db.prepare("SELECT * FROM users WHERE email = ?").get(normalizeEmail(emailInput)) as UserRow | undefined;
-    // Hash even when the user doesn't exist so timing doesn't reveal which emails are registered.
+    // Hash even when the user doesn't exist (or has no password) so timing doesn't reveal which emails are registered.
     const ok = await verifyPassword(password, row?.password_hash ?? DUMMY_HASH);
     if (!row || !ok) throw new AuthError("That email and password don't match. Check them and try again.", 401);
+    return toUser(row);
+  }
+
+  /** Sign in with Google: match by Google id, then by verified email (linking it); otherwise create when allowed. */
+  googleUser(input: { sub: string; email: string; name: string }, canCreate: () => "admin" | "member" | null): AuthUser {
+    const bySub = this.db.prepare("SELECT * FROM users WHERE google_sub = ?").get(input.sub) as UserRow | undefined;
+    if (bySub) return toUser(bySub);
+    const email = normalizeEmail(input.email);
+    const byEmail = this.db.prepare("SELECT * FROM users WHERE email = ?").get(email) as UserRow | undefined;
+    if (byEmail) {
+      this.db.prepare("UPDATE users SET google_sub = ? WHERE id = ?").run(input.sub, byEmail.id);
+      return toUser(byEmail);
+    }
+    const role = canCreate();
+    if (!role) throw new AuthError("There's no Synod account for this Google address. Ask for an invite, then sign up.", 403);
+    const id = crypto.randomUUID();
+    const name = input.name.trim().slice(0, 80) || email.split("@")[0];
+    // Google-only accounts have no password; password sign-in can't match an empty hash.
+    this.db
+      .prepare("INSERT INTO users(id, email, name, password_hash, role, created_at, google_sub) VALUES(?, ?, ?, '', ?, ?, ?)")
+      .run(id, email, name, role, new Date().toISOString(), input.sub);
+    return { id, email, name, role, profile: null };
+  }
+
+  setProfile(userId: string, input: unknown): AuthUser {
+    const profile = validateProfile(input);
+    this.db.prepare("UPDATE users SET profile = ? WHERE id = ?").run(JSON.stringify(profile), userId);
+    const row = this.db.prepare("SELECT * FROM users WHERE id = ?").get(userId) as unknown as UserRow;
     return toUser(row);
   }
 
@@ -75,7 +105,30 @@ export class Accounts {
 }
 
 function toUser(row: UserRow): AuthUser {
-  return { id: row.id, email: row.email, name: row.name, role: row.role === "admin" ? "admin" : "member" };
+  let profile: UserProfile | null = null;
+  try {
+    profile = row.profile ? (JSON.parse(row.profile) as UserProfile) : null;
+  } catch {
+    profile = null;
+  }
+  return { id: row.id, email: row.email, name: row.name, role: row.role === "admin" ? "admin" : "member", profile };
+}
+
+function validateProfile(input: unknown): UserProfile {
+  const p = (input && typeof input === "object" ? input : {}) as Record<string, unknown>;
+  const text = (v: unknown, max: number) => String(v ?? "").trim().slice(0, max);
+  const profession = PROFESSIONS.includes(p.profession as UserProfile["profession"]) ? (p.profession as UserProfile["profession"]) : null;
+  const country = text(p.country, 80);
+  if (!profession) throw new AuthError("Choose what best describes your work.", 400);
+  if (!country) throw new AuthError("Tell us where you practise, so advice follows the right rules.", 400);
+  return {
+    profession,
+    specialty: text(p.specialty, 120),
+    country,
+    ...(text(p.region, 80) ? { region: text(p.region, 80) } : {}),
+    ...(text(p.setting, 120) ? { setting: text(p.setting, 120) } : {}),
+    answerStyle: p.answerStyle === "concise" ? "concise" : "detailed"
+  };
 }
 
 function normalizeEmail(email: string): string {

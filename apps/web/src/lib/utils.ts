@@ -20,3 +20,10 @@ export function relativeTime(iso: string): string {
   const d = Math.round(h / 24);
   return d < 7 ? `${d}d ago` : new Date(iso).toLocaleDateString();
 }
+
+/** "Dr Priya Shah" -> "Priya": skip titles so greetings use the person's name. */
+export function firstName(fullName: string): string {
+  const parts = fullName.trim().split(/\s+/);
+  const titles = /^(dr|mr|mrs|ms|miss|mx|prof|professor|sir|dame|adv|advocate|hon)\.?$/i;
+  return parts.find((p) => !titles.test(p)) ?? parts[0] ?? "";
+}

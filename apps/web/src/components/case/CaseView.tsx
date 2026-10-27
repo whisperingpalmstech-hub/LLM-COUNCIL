@@ -1,11 +1,12 @@
 import { Menu, PanelRight } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
-import type { ServerInfo } from "@synod/contracts";
+import type { Depth, ServerInfo } from "@synod/contracts";
 import { api, fileToBase64 } from "~/lib/api";
 import { MODE_UI } from "~/lib/modes";
 import { useConversation, useDraftRev } from "~/lib/store";
 import { cn } from "~/lib/utils";
 import { Composer } from "../Composer";
+import { DepthPicker } from "../DepthPicker";
 import { Button } from "../ui/button";
 import { CouncilPanel, type PanelTab } from "./CouncilPanel";
 import { TurnBlock } from "./TurnBlock";
@@ -14,6 +15,10 @@ export function CaseView({ id, info, onOpenSidebar }: { id: string; info: Server
   const conversation = useConversation(id);
   const draftRev = useDraftRev();
   const [draft, setDraft] = useState("");
+  const [depth, setDepth] = useState<Depth>("standard");
+  useEffect(() => {
+    api.council().then((c) => setDepth(c.depth), () => undefined);
+  }, []);
   const [panel, setPanel] = useState<{ turnId: string; tab: PanelTab; memberId?: string } | null>(null);
   const scroller = useRef<HTMLDivElement>(null);
   const pinned = useRef(true);
@@ -84,14 +89,15 @@ export function CaseView({ id, info, onOpenSidebar }: { id: string; info: Server
             placeholder={conversation.turns.length ? "Ask a follow-up or add new information…" : mode.placeholder}
             busy={busy}
             onStop={() => api.cancel(id)}
-            files={conversation.pendingAttachments.map((a) => ({ id: a.id, name: a.name, readable: Boolean(a.excerpt) }))}
+            files={conversation.pendingAttachments.map((a) => ({ id: a.id, name: a.name, readable: Boolean(a.excerpt) || a.kind === "image" }))}
             onAttach={async (files) => {
               for (const f of files) await api.upload(id, { name: f.name, mimeType: f.type, data: await fileToBase64(f) });
             }}
             voice={Boolean(info?.voice.available)}
+            footer={<DepthPicker value={depth} onChange={setDepth} />}
             phoneLink={() => api.uploadLink(id).then((r) => (r.url.startsWith("http") ? r.url : `${location.origin}${r.url}`))}
             onSend={async () => {
-              await api.send(id, draft);
+              await api.send(id, draft, { depth });
               setDraft("");
               pinned.current = true;
             }}

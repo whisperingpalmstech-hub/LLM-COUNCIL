@@ -4,6 +4,7 @@
 import type {
   Attachment,
   Brief,
+  CaseContext,
   CaseMode,
   Conversation,
   CouncilConfig,
@@ -19,13 +20,14 @@ import type {
 type E<T extends string, P> = { type: T; seq: number; conversationId: string; at: string } & P;
 
 export type ConversationEvent =
-  | E<"conversation.created", { title: string; mode: CaseMode; ownerId?: string }>
+  | E<"conversation.created", { title: string; mode: CaseMode; ownerId?: string; autoMode?: boolean }>
   | E<"conversation.mode_changed", { mode: CaseMode }>
   | E<"conversation.renamed", { title: string }>
   | E<"conversation.archived", { archived: boolean }>
   | E<"attachment.added", { attachment: Attachment }>
-  | E<"turn.started", { turnId: string; prompt: string; mode: CaseMode; council: CouncilConfig }>
-  | E<"turn.stage_started", { turnId: string; stage: TurnStage }>
+  | E<"turn.started", { turnId: string; prompt: string; mode: CaseMode; council: CouncilConfig; rounds?: number; context?: CaseContext }>
+  | E<"turn.stage_started", { turnId: string; stage: TurnStage; cycle?: number }>
+  | E<"turn.converged", { turnId: string; cycle: number }>
   | E<"turn.clarification_requested", { turnId: string; question: string }>
   | E<"turn.clarification_answered", { turnId: string; answer: string }>
   | E<"turn.research_completed", { turnId: string; results: SearchResult[] }>
@@ -34,6 +36,7 @@ export type ConversationEvent =
   | E<"turn.stage2_aggregated", { turnId: string; aggregate: Stage2Aggregate }>
   | E<"turn.synthesis_completed", { turnId: string; synthesis: Synthesis }>
   | E<"turn.brief_generated", { turnId: string; brief: Brief }>
+  | E<"turn.brief_failed", { turnId: string; error: string }>
   | E<"turn.handed_off", { turnId: string; result: HandoffResult }>
   | E<"turn.completed", { turnId: string }>
   | E<"turn.failed", { turnId: string; error: string }>;
@@ -77,6 +80,7 @@ export function applyEvent(state: Conversation, event: ConversationEvent): Conve
       next.title = event.title;
       next.mode = event.mode ?? "general"; // cases created before modes existed
       if (event.ownerId) next.ownerId = event.ownerId;
+      if (event.autoMode) next.autoMode = true;
       next.createdAt = event.at;
       break;
     case "conversation.mode_changed":
@@ -102,6 +106,9 @@ export function applyEvent(state: Conversation, event: ConversationEvent): Conve
           status: "running",
           stage: null,
           council: event.council,
+          rounds: event.rounds ?? 3,
+          cycle: 1,
+          ...(event.context ? { context: event.context } : {}),
           research: [],
           stage1: [],
           stage2: [],
@@ -111,7 +118,10 @@ export function applyEvent(state: Conversation, event: ConversationEvent): Conve
       next.pendingAttachments = [];
       break;
     case "turn.stage_started":
-      patchTurn(() => ({ stage: event.stage, stageStartedAt: event.at, status: "running" }));
+      patchTurn((t) => ({ stage: event.stage, stageStartedAt: event.at, status: "running", cycle: event.cycle ?? t.cycle }));
+      break;
+    case "turn.converged":
+      patchTurn(() => ({ convergedEarly: true }));
       break;
     case "turn.clarification_requested":
       patchTurn(() => ({ status: "awaiting_clarification", clarification: { question: event.question } }));
@@ -123,16 +133,20 @@ export function applyEvent(state: Conversation, event: ConversationEvent): Conve
       patchTurn(() => ({ research: event.results }));
       break;
     case "turn.stage1_response":
-      patchTurn((t) => ({ stage1: [...t.stage1, event.response] }));
+      patchTurn((t) => ({ stage1: [...t.stage1, { ...event.response, round: event.response.round ?? 1 }] }));
       break;
     case "turn.stage2_review":
-      patchTurn((t) => ({ stage2: [...t.stage2, event.review] }));
+      patchTurn((t) => ({ stage2: [...t.stage2, { ...event.review, round: event.review.round ?? 1 }] }));
       break;
     case "turn.stage2_aggregated":
-      patchTurn(() => ({ aggregate: event.aggregate }));
+      // Older events predate rounds and agreement; fill the gaps.
+      patchTurn(() => ({ aggregate: { ...({ round: 1, agreement: 0, selfPreferred: 0 } as const), ...(event.aggregate as Partial<typeof event.aggregate>), labelToMemberId: event.aggregate.labelToMemberId, rankings: event.aggregate.rankings } }));
       break;
     case "turn.synthesis_completed":
       patchTurn(() => ({ synthesis: event.synthesis }));
+      break;
+    case "turn.brief_failed":
+      patchTurn(() => ({ briefError: event.error }));
       break;
     case "turn.brief_generated":
       patchTurn(() => ({ brief: event.brief }));

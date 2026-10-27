@@ -31,7 +31,10 @@ export class GeminiProvider implements Provider {
       headers: { "x-goog-api-key": this.apiKey ?? "" },
       body: {
         ...(request.system ? { systemInstruction: { parts: [{ text: request.system }] } } : {}),
-        contents: request.messages.map((m) => ({ role: m.role === "assistant" ? "model" : "user", parts: [{ text: m.content }] })),
+        contents: request.messages.map((m) => ({
+          role: m.role === "assistant" ? "model" : "user",
+          parts: [...(m.images ?? []).map((img) => ({ inline_data: { mime_type: img.mimeType, data: img.data } })), { text: m.content }]
+        })),
         ...(request.json ? { generationConfig: { responseMimeType: "application/json" } } : {})
       }
     };

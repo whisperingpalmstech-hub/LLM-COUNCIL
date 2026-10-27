@@ -15,6 +15,8 @@ export interface Config {
   /** Signs phone upload links. Generated and stored on first run when not set. */
   secret: string | null;
   signup: { mode: "invite" | "open" | "closed"; inviteCode: string | null };
+  /** "Continue with Google" (create an OAuth client in Google Cloud). */
+  google: { clientId: string; clientSecret: string } | null;
   /** Created on startup if there are no users yet. */
   bootstrapAdmin: { email: string; password: string; name: string } | null;
   tls: { certPath: string; keyPath: string } | null;
@@ -39,6 +41,7 @@ export function loadConfig(env: Env = process.env): Config {
       mode: env.SYNOD_SIGNUP === "open" ? "open" : env.SYNOD_INVITE_CODE ? "invite" : "closed",
       inviteCode: env.SYNOD_INVITE_CODE || null
     },
+    google: env.GOOGLE_CLIENT_ID && env.GOOGLE_CLIENT_SECRET ? { clientId: env.GOOGLE_CLIENT_ID, clientSecret: env.GOOGLE_CLIENT_SECRET } : null,
     bootstrapAdmin:
       env.SYNOD_ADMIN_EMAIL && env.SYNOD_ADMIN_PASSWORD ? { email: env.SYNOD_ADMIN_EMAIL, password: env.SYNOD_ADMIN_PASSWORD, name: env.SYNOD_ADMIN_NAME || "Admin" } : null,
     tls: env.SYNOD_TLS_CERT_PATH && env.SYNOD_TLS_KEY_PATH ? { certPath: env.SYNOD_TLS_CERT_PATH, keyPath: env.SYNOD_TLS_KEY_PATH } : null,

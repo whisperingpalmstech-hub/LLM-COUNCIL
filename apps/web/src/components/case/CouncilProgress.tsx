@@ -10,11 +10,29 @@ import type { PanelTab } from "./CouncilPanel";
 
 type SeatState = "waiting" | "thinking" | "writing" | "done" | "skipped" | "failed";
 
-const STEPS: { stage: TurnStage[]; label: string }[] = [
-  { stage: ["clarify", "research", "stage1"], label: "Independent opinions" },
-  { stage: ["stage2"], label: "Anonymous review" },
-  { stage: ["stage3", "brief"], label: "Verdict" }
-];
+/** The planned rounds: answer, review, [revise, review]…, verdict. */
+function steps(rounds: number): string[] {
+  const cycles = Math.max(1, (rounds - 1) / 2);
+  const out = ["Opinions", "Blind review"];
+  for (let c = 2; c <= cycles; c++) out.push("Revise", "Review again");
+  return [...out, "Verdict"];
+}
+
+function currentStep(turn: Turn): number {
+  const last = steps(turn.rounds).length - 1;
+  if (turn.status === "completed") return last + 1;
+  switch (turn.stage) {
+    case "stage2":
+      return 1 + 2 * (turn.cycle - 1);
+    case "revise":
+      return 2 * (turn.cycle - 1);
+    case "stage3":
+    case "brief":
+      return last;
+    default:
+      return 0;
+  }
+}
 
 export function CouncilProgress({ turn, onOpenPanel }: { turn: Turn; onOpenPanel: (tab: PanelTab, memberId?: string) => void }) {
   const running = turn.status === "running";
@@ -23,7 +41,10 @@ export function CouncilProgress({ turn, onOpenPanel }: { turn: Turn; onOpenPanel
   const total = (turn.completedAt ? new Date(turn.completedAt).getTime() : now) - new Date(turn.startedAt).getTime();
   const stageElapsed = turn.stageStartedAt ? now - new Date(turn.stageStartedAt).getTime() : 0;
 
-  const stepIndex = turn.status === "completed" ? STEPS.length : Math.max(0, STEPS.findIndex((s) => turn.stage && s.stage.includes(turn.stage)));
+  const plan = steps(turn.rounds ?? 3);
+  const stepIndex = currentStep({ ...turn, rounds: turn.rounds ?? 3, cycle: turn.cycle ?? 1 });
+  // When the council converged early, the rounds it skipped are shown as skipped rather than pending.
+  const skippedFrom = turn.convergedEarly ? 2 * Math.max(1, ...turn.stage2.map((r) => r.round ?? 1)) : Infinity;
   const top = turn.aggregate?.rankings[0]?.memberId;
 
   if (turn.stage === "clarify" && running) return <Status text="Reading the case…" />;
@@ -32,7 +53,8 @@ export function CouncilProgress({ turn, onOpenPanel }: { turn: Turn; onOpenPanel
     <section className="fade-in rounded-3xl border bg-card px-5 pt-5 pb-3 shadow-[var(--shadow-raised)]" aria-label="Council progress">
       <p className="font-medium text-sm">{running ? statusLine(turn) : turn.status === "completed" ? "The council has reached a verdict" : "The council stopped"}</p>
       <p className="mt-0.5 text-muted-foreground text-xs tabular-nums">
-        {turn.council.members.length} members, chaired by {turn.council.chairman.label}. {formatDuration(total)}
+        {turn.council.members.length} members, chaired by {turn.council.chairman.label}. {plan.length} rounds. {formatDuration(total)}
+        {turn.convergedEarly && <span className="text-success-foreground"> Agreed early, so the remaining rounds were skipped.</span>}
       </p>
 
       <div className="mt-5 flex flex-wrap gap-x-3 gap-y-4" role="list">
@@ -41,11 +63,12 @@ export function CouncilProgress({ turn, onOpenPanel }: { turn: Turn; onOpenPanel
         ))}
       </div>
 
-      <ol className="mt-5 grid grid-cols-3 gap-2" aria-label="Stages">
-        {STEPS.map((s, i) => {
-          const state = i < stepIndex ? "done" : i === stepIndex && running ? "active" : "pending";
+      <ol className="mt-5 grid gap-2" style={{ gridTemplateColumns: `repeat(${plan.length}, minmax(0, 1fr))` }} aria-label="Rounds">
+        {plan.map((label, i) => {
+          const skipped = i >= skippedFrom && i < plan.length - 1;
+          const state = skipped ? "skipped" : i < stepIndex ? "done" : i === stepIndex && running ? "active" : "pending";
           return (
-            <li key={s.label} className="min-w-0">
+            <li key={`${label}-${i}`} className="min-w-0" title={skipped ? "Skipped: the reviewers already agreed" : label}>
               <div className="h-1 overflow-hidden rounded-full bg-border">
                 <div
                   className={cn(
@@ -54,7 +77,7 @@ export function CouncilProgress({ turn, onOpenPanel }: { turn: Turn; onOpenPanel
                   )}
                 />
               </div>
-              <p className={cn("mt-1.5 truncate text-2xs", state === "pending" ? "text-faint" : "text-muted-foreground")}>{s.label}</p>
+              <p className={cn("mt-1.5 truncate text-2xs", state === "pending" || state === "skipped" ? "text-faint" : "text-muted-foreground", state === "skipped" && "line-through")}>{label}</p>
             </li>
           );
         })}
@@ -116,7 +139,9 @@ function statusLine(turn: Turn): string {
     case "stage1":
       return `Forming independent opinions: ${turn.stage1.length} of ${turn.council.members.length} in`;
     case "stage2":
-      return "Reviewing each other's answers anonymously…";
+      return turn.cycle > 1 ? "Reviewing the revised answers…" : "Reviewing each other's answers anonymously…";
+    case "revise":
+      return "Revising their answers after critique…";
     case "stage3":
     case "brief":
       return `${turn.council.chairman.label} is weighing the opinions…`;
@@ -130,21 +155,43 @@ function skippedText(error: string): string {
 }
 
 function seatState(turn: Turn, memberId: string, draft: string | undefined): SeatState {
-  const r = turn.stage1.find((x) => x.memberId === memberId);
+  const writingRound = turn.stage === "stage1" || turn.stage === "revise";
+  const round = writingRound ? (turn.cycle ?? 1) : Math.max(1, ...turn.stage1.filter((x) => x.memberId === memberId).map((x) => x.round ?? 1));
+  const r = turn.stage1.find((x) => x.memberId === memberId && (x.round ?? 1) === round);
   if (r) return r.error ? (r.error.startsWith("Too slow") ? "skipped" : "failed") : "done";
+  const earlier = turn.stage1.find((x) => x.memberId === memberId && (x.round ?? 1) < round);
+  if (earlier?.error) return earlier.error.startsWith("Too slow") ? "skipped" : "failed";
   if (turn.status !== "running") return "skipped";
-  if (turn.stage !== "stage1" && turn.stage !== "research") return "waiting";
+  if (!writingRound && turn.stage !== "research") return "waiting";
   return draft ? "writing" : "thinking";
 }
 
 function Seat({ turn, member, index, crowned, onOpen }: { turn: Turn; member: CouncilMember; index: number; crowned: boolean; onOpen: () => void }) {
   const draft = useDraft(turn.id, `stage1:${member.id}`);
-  const answered = turn.stage1.some((r) => r.memberId === member.id && !r.error);
-  const reviewing = turn.stage === "stage2" && turn.status === "running" && answered && !turn.stage2.some((r) => r.memberId === member.id);
+  const cycle = turn.cycle ?? 1;
+  const answered = turn.stage1.some((r) => r.memberId === member.id && (r.round ?? 1) === cycle && !r.error);
+  const reviewing = turn.stage === "stage2" && turn.status === "running" && answered && !turn.stage2.some((r) => r.memberId === member.id && (r.round ?? 1) === cycle);
   const state = seatState(turn, member.id, draft);
   const busy = state === "thinking" || state === "writing" || reviewing;
   const words = draft ? draft.split(/\s+/).length : 0;
-  const caption = reviewing ? "Reviewing" : state === "writing" ? `${words} words` : state === "thinking" ? "Thinking" : state === "done" ? "Answered" : state === "skipped" ? "Skipped" : state === "failed" ? "Failed" : "Waiting";
+  const revising = turn.stage === "revise";
+  const caption = reviewing
+    ? "Reviewing"
+    : state === "writing"
+      ? `${revising ? "Revising, " : ""}${words} words`
+      : state === "thinking"
+        ? revising
+          ? "Revising"
+          : "Thinking"
+        : state === "done"
+          ? cycle > 1 && turn.status === "running"
+            ? "Revised"
+            : "Answered"
+          : state === "skipped"
+            ? "Skipped"
+            : state === "failed"
+              ? "Failed"
+              : "Waiting";
 
   return (
     <button

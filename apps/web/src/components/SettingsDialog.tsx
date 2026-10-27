@@ -1,6 +1,8 @@
 import { Crown, Plus, Trash2 } from "lucide-react";
 import { useEffect, useState } from "react";
-import { PROVIDER_IDS, type CouncilConfig, type CouncilMember, type ProviderId, type ServerInfo } from "@synod/contracts";
+import { CASE_MODES, DEPTH_ROUNDS, DEPTHS, PROVIDER_IDS, type CaseMode, type CouncilConfig, type CouncilMember, type ProviderId, type ServerInfo } from "@synod/contracts";
+import { MODE_UI } from "~/lib/modes";
+import { DEPTH_UI } from "./DepthPicker";
 import { api } from "~/lib/api";
 import { cn } from "~/lib/utils";
 import { Button } from "./ui/button";
@@ -13,7 +15,7 @@ const PRESETS: { name: string; note: string; members: [string, string][]; chairm
     name: "Frontier",
     note: "Strongest models from each lab",
     members: [["GPT-6.1 Terra", "openai/gpt-6.1-terra"], ["Claude Sonnet 5.5", "anthropic/claude-sonnet-5.5"], ["Gemini 4 Argon", "google/gemini-4-argon"], ["Grok 4.7", "x-ai/grok-4.7"]],
-    chairman: "anthropic/claude-sonnet-5.5"
+    chairman: "anthropic/claude-opus-5.5"
   },
   {
     name: "Fast & cheap",
@@ -27,9 +29,12 @@ export function SettingsDialog({ open, onOpenChange, info }: { open: boolean; on
   const [council, setCouncil] = useState<CouncilConfig | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [saved, setSaved] = useState(false);
+  const [recipes, setRecipes] = useState<Awaited<ReturnType<typeof api.recipes>> | null>(null);
 
   useEffect(() => {
-    if (open) api.council().then(setCouncil).catch((e) => setError(e.message));
+    if (!open) return;
+    api.council().then(setCouncil).catch((e) => setError(e.message));
+    api.recipes().then(setRecipes, () => undefined);
   }, [open]);
 
   const configured = (p: ProviderId) => info?.providers.find((s) => s.provider === p)?.configured ?? false;
@@ -50,11 +55,94 @@ export function SettingsDialog({ open, onOpenChange, info }: { open: boolean; on
   };
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange} title="Council" description="Choose which models deliberate on your cases and who chairs.">
+    <Dialog open={open} onOpenChange={onOpenChange} title="Council settings" description="Synod picks strong models for you. Change them only if you want to.">
       {!council ? (
         <p className="text-muted-foreground text-sm">{error ?? "Loading…"}</p>
       ) : (
         <div className="flex flex-col gap-6">
+          <div>
+            <SectionTitle>Who sits on the council</SectionTitle>
+            <div className="mt-2 grid gap-2 sm:grid-cols-2" role="radiogroup">
+              {(
+                [
+                  [true, "Recommended", "The best-performing models for each type of case, updated as models improve"],
+                  [false, "Choose my own", "Pick the members and the chairman yourself"]
+                ] as const
+              ).map(([value, label, hint]) => (
+                <button
+                  key={label}
+                  type="button"
+                  role="radio"
+                  aria-checked={council.auto === value}
+                  disabled={value && !recipes?.available}
+                  onClick={() => update({ auto: value })}
+                  className={cn(
+                    "cursor-pointer rounded-2xl border p-3.5 text-left transition-[background-color,border-color,box-shadow] duration-150 disabled:cursor-not-allowed disabled:opacity-50",
+                    council.auto === value ? "border-ring/50 shadow-[0_0_0_3px_color-mix(in_srgb,var(--ring)_12%,transparent)]" : "hover:bg-accent"
+                  )}
+                >
+                  <p className="font-medium text-sm">{label}</p>
+                  <p className="mt-0.5 text-muted-foreground text-xs">{value && !recipes?.available ? "Needs an OpenRouter key on the server" : hint}</p>
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {council.auto && recipes?.available && (
+            <div>
+              <SectionTitle>What you'll get</SectionTitle>
+              <ul className="mt-2 divide-y rounded-2xl border">
+                {CASE_MODES.map((m: CaseMode) => {
+                  const r = recipes.recipes[m];
+                  const Icon = MODE_UI[m].icon;
+                  return (
+                    <li key={m} className="flex items-center gap-3 px-3.5 py-2.5">
+                      <Icon className={cn("size-4 shrink-0", MODE_UI[m].tint)} />
+                      <span className="w-20 shrink-0 font-medium text-sm">{MODE_UI[m].label}</span>
+                      <span className="flex min-w-0 flex-1 flex-wrap items-center gap-x-3 gap-y-1 text-muted-foreground text-xs">
+                        {r.members.map((mem) => (
+                          <span key={mem.id} className="flex items-center gap-1.5">
+                            <ModelLogo member={mem} className="size-3.5" />
+                            {mem.label}
+                          </span>
+                        ))}
+                      </span>
+                      <span className="flex shrink-0 items-center gap-1 text-muted-foreground text-xs" title={`Chairman: ${r.chairman.label}`}>
+                        <Crown className="size-3 text-amber-500" />
+                        <ModelLogo member={r.chairman} className="size-3.5" />
+                      </span>
+                    </li>
+                  );
+                })}
+              </ul>
+              <p className="mt-2 text-faint text-xs">Chosen from public benchmarks (Vals AI LegalBench and MedQA, Terminal-Bench, Artificial Analysis) and our own testing. Models from different labs make fewer of the same mistakes.</p>
+            </div>
+          )}
+
+          <div>
+            <SectionTitle>Default depth</SectionTitle>
+            <div className="mt-2 grid grid-cols-3 gap-1 rounded-xl bg-muted p-1" role="radiogroup">
+              {DEPTHS.map((d) => (
+                <button
+                  key={d}
+                  type="button"
+                  role="radio"
+                  aria-checked={council.depth === d}
+                  onClick={() => update({ depth: d })}
+                  className={cn("cursor-pointer rounded-lg px-3 py-2 text-left transition-[background-color,box-shadow] duration-150", council.depth === d ? "bg-card shadow-[0_1px_3px_rgb(0_0_0/10%)]" : "text-muted-foreground hover:text-foreground")}
+                >
+                  <span className="block font-medium text-sm">{DEPTH_UI[d].label}</span>
+                  <span className="block text-2xs text-muted-foreground">
+                    {DEPTH_ROUNDS[d]} rounds, {DEPTH_UI[d].time}
+                  </span>
+                </button>
+              ))}
+            </div>
+            <p className="mt-2 text-faint text-xs">You can change the depth for any single case from the box where you type.</p>
+          </div>
+
+          {!council.auto && (
+          <>
           {configured("openrouter") && (
             <div>
               <SectionTitle>Presets</SectionTitle>
@@ -118,6 +206,9 @@ export function SettingsDialog({ open, onOpenChange, info }: { open: boolean; on
               <MemberRow member={council.chairman} configured={configured} onChange={(patch) => update({ chairman: { ...council.chairman, ...patch } })} />
             </div>
           </div>
+
+          </>
+          )}
 
           <div>
             <SectionTitle>Behaviour</SectionTitle>

@@ -10,6 +10,8 @@
   "dependencies": {
     "@synod/contracts": "*",
     "express": "^5.1.0",
+    "mammoth": "^1.13.0",
+    "unpdf": "^1.9.1",
     "ws": "^8.18.0"
   },
   "devDependencies": {

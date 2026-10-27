@@ -36,7 +36,11 @@ export class AnthropicProvider implements Provider {
         model: request.model || this.model,
         max_tokens: this.maxTokens,
         ...(system ? { system } : {}),
-        messages: request.messages,
+        messages: request.messages.map((m) =>
+          m.images?.length
+            ? { role: m.role, content: [...m.images.map((img) => ({ type: "image", source: { type: "base64", media_type: img.mimeType, data: img.data } })), { type: "text", text: m.content }] }
+            : { role: m.role, content: m.content }
+        ),
         ...(request.onText ? { stream: true } : {})
       }
     };

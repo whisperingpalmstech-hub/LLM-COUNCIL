@@ -7,6 +7,7 @@ import { Landing } from "./components/Landing";
 import { MobileUpload } from "./components/MobileUpload";
 import { NewCase } from "./components/NewCase";
 import { SettingsDialog } from "./components/SettingsDialog";
+import { Welcome } from "./components/Welcome";
 import { Logo, Sidebar } from "./components/Sidebar";
 import { api } from "./lib/api";
 import { useAuth } from "./lib/auth";
@@ -31,6 +32,12 @@ export function App() {
     navigate(`/login?next=${encodeURIComponent(location.pathname)}`, { replace: true });
     return null;
   }
+  // New accounts answer a few questions first; the answers become context for every case.
+  if (route.name === "welcome") return <Welcome />;
+  if (!auth.user.profile) {
+    navigate("/welcome", { replace: true });
+    return null;
+  }
   return <Workspace />;
 }
 
@@ -41,7 +48,6 @@ function Workspace() {
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [paletteOpen, setPaletteOpen] = useState(false);
   const [sidebarOpen, setSidebarOpen] = useState(false);
-  const isAdmin = auth.status === "signed-in" && auth.user.role === "admin";
 
   useEffect(() => {
     api.info().then(setInfo).catch(() => undefined);
@@ -70,14 +76,14 @@ function Workspace() {
         activeId={route.name === "conversation" ? route.id : null}
         open={sidebarOpen}
         onClose={() => setSidebarOpen(false)}
-        onSettings={isAdmin ? () => setSettingsOpen(true) : undefined}
+        onSettings={() => setSettingsOpen(true)}
         onSearch={() => setPaletteOpen(true)}
       />
       <main className="flex min-w-0 flex-1 flex-col">
         {route.name === "conversation" ? <CaseView key={route.id} id={route.id} info={info} onOpenSidebar={() => setSidebarOpen(true)} /> : <NewCase info={info} onOpenSidebar={() => setSidebarOpen(true)} />}
       </main>
-      {isAdmin && <SettingsDialog open={settingsOpen} onOpenChange={setSettingsOpen} info={info} />}
-      <CommandPalette open={paletteOpen} onOpenChange={setPaletteOpen} onSettings={isAdmin ? () => setSettingsOpen(true) : undefined} />
+      <SettingsDialog open={settingsOpen} onOpenChange={setSettingsOpen} info={info} />
+      <CommandPalette open={paletteOpen} onOpenChange={setPaletteOpen} onSettings={() => setSettingsOpen(true)} />
     </div>
   );
 }

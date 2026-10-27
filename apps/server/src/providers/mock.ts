@@ -37,6 +37,11 @@ export class MockProvider implements Provider {
     const model = request.model || "mock";
     switch (request.purpose) {
       case "clarify": {
+        if (prompt.startsWith("Classify this request")) {
+          const q = prompt.slice(prompt.indexOf("Request:"));
+          const mode = /patient|mg|diagnos|dose|symptom/i.test(q) ? "medical" : /contract|court|lawsuit|sue|clause|legal/i.test(q) ? "legal" : /code|kubectl|sql|deploy|function|bug/i.test(q) ? "code" : "general";
+          return JSON.stringify({ mode });
+        }
         const question = prompt.match(/Question:\n([\s\S]*?)(\n\n|$)/)?.[1] ?? prompt;
         return JSON.stringify(
           question.length < 40 && !/clarifying answer/i.test(prompt)

@@ -13,12 +13,20 @@ const field =
 
 export function AuthPage({ mode }: { mode: "login" | "signup" }) {
   const [signup, setSignup] = useState<SignupMode | null>(null);
-  const [error, setError] = useState<string | null>(null);
+  const [google, setGoogle] = useState(false);
+  const [error, setError] = useState<string | null>(() => new URLSearchParams(location.search).get("error"));
+  const [invite, setInvite] = useState("");
   const [busy, setBusy] = useState(false);
   const next = new URLSearchParams(location.search).get("next");
 
   useEffect(() => {
-    api.authConfig().then((c) => setSignup(c.signup), () => setSignup("closed"));
+    api.authConfig().then(
+      (c) => {
+        setSignup(c.signup);
+        setGoogle(c.google);
+      },
+      () => setSignup("closed")
+    );
   }, []);
 
   const submit = async (e: FormEvent<HTMLFormElement>) => {
@@ -33,7 +41,7 @@ export function AuthPage({ mode }: { mode: "login" | "signup" }) {
           ? await api.login(body)
           : await api.signup({ ...body, name: String(form.get("name") ?? ""), inviteCode: String(form.get("invite") ?? "") || undefined });
       signedIn(user);
-      navigate(next && next.startsWith("/") ? next : "/new", { replace: true });
+      navigate(user.profile ? (next && next.startsWith("/") ? next : "/new") : "/welcome", { replace: true });
     } catch (err) {
       setError((err as Error).message);
     } finally {
@@ -69,7 +77,31 @@ export function AuthPage({ mode }: { mode: "login" | "signup" }) {
                   : "Your cases stay private to your account."}
           </p>
 
-          <form className="mt-8 flex flex-col gap-3.5" onSubmit={submit}>
+          {google && (
+            <>
+              <a
+                href={`/api/auth/google/start?${new URLSearchParams({ ...(next ? { next } : {}), ...(invite ? { invite } : {}) })}`}
+                aria-disabled={mode === "signup" && signup === "invite" && !invite}
+                onClick={(e) => {
+                  if (mode === "signup" && signup === "invite" && !invite) {
+                    e.preventDefault();
+                    setError("Enter your invite code below first, then continue with Google.");
+                  }
+                }}
+                className="mt-8 flex h-11 w-full items-center justify-center gap-2.5 rounded-xl border border-border-strong bg-card font-medium text-[0.9375rem] shadow-[0_1px_2px_rgb(0_0_0/4%)] transition-[background-color,scale] duration-150 hover:bg-accent active:scale-[0.98]"
+              >
+                <GoogleMark />
+                Continue with Google
+              </a>
+              <div className="my-6 flex items-center gap-3 text-faint text-xs">
+                <span className="h-px flex-1 bg-border" />
+                or with email
+                <span className="h-px flex-1 bg-border" />
+              </div>
+            </>
+          )}
+
+          <form className={google ? "flex flex-col gap-3.5" : "mt-8 flex flex-col gap-3.5"} onSubmit={submit}>
             {mode === "signup" && (
               <Field label="Name">
                 <input name="name" autoComplete="name" required className={field} placeholder="Dr Jane Smith" />
@@ -83,7 +115,7 @@ export function AuthPage({ mode }: { mode: "login" | "signup" }) {
             </Field>
             {mode === "signup" && signup === "invite" && (
               <Field label="Invite code">
-                <input name="invite" autoComplete="off" spellCheck={false} required className={field} />
+                <input name="invite" autoComplete="off" spellCheck={false} required className={field} value={invite} onChange={(e) => setInvite(e.target.value)} />
               </Field>
             )}
             {error && (
@@ -149,5 +181,16 @@ function AuthLink({ to, children }: { to: string; children: React.ReactNode }) {
     >
       {children}
     </a>
+  );
+}
+
+function GoogleMark() {
+  return (
+    <svg viewBox="0 0 24 24" className="size-[18px]" aria-hidden>
+      <path fill="#4285F4" d="M23.5 12.27c0-.85-.08-1.67-.22-2.45H12v4.64h6.45a5.52 5.52 0 0 1-2.4 3.62v3h3.88c2.27-2.09 3.57-5.17 3.57-8.81z" />
+      <path fill="#34A853" d="M12 24c3.24 0 5.96-1.07 7.95-2.9l-3.88-3.01c-1.08.72-2.45 1.15-4.07 1.15-3.13 0-5.78-2.11-6.73-4.95H1.27v3.11A12 12 0 0 0 12 24z" />
+      <path fill="#FBBC05" d="M5.27 14.29A7.2 7.2 0 0 1 4.9 12c0-.8.14-1.57.37-2.29V6.6H1.27a12 12 0 0 0 0 10.8l4-3.11z" />
+      <path fill="#EA4335" d="M12 4.77c1.76 0 3.34.61 4.59 1.8l3.44-3.44A11.5 11.5 0 0 0 12 0 12 12 0 0 0 1.27 6.6l4 3.11C6.22 6.88 8.87 4.77 12 4.77z" />
+    </svg>
   );
 }

@@ -2,6 +2,7 @@ import crypto from "node:crypto";
 import fs from "node:fs";
 import http from "node:http";
 import https from "node:https";
+import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { Accounts } from "./auth/accounts.ts";
 import { loadConfig, type Config } from "./config.ts";
@@ -22,7 +23,7 @@ export function createServer(config: Config) {
   const search = new WebSearch(config.env);
   const settings = new Settings(db);
   const accounts = new Accounts(db);
-  const engine = new CouncilEngine({ store, providers, settings, search, obsidianVaultPath: config.obsidianVaultPath, env: config.env });
+  const engine = new CouncilEngine({ store, providers, settings, search, obsidianVaultPath: config.obsidianVaultPath, uploadsDir: path.join(config.dataDir, "uploads"), env: config.env });
   // A stable secret for signed upload links: from env, else generated once and kept in the database.
   let secret = config.secret ?? settings.get<string>("secret");
   if (!secret) {

@@ -2,7 +2,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { DatabaseSync } from "node:sqlite";
 
-const SCHEMA_VERSION = 2;
+const SCHEMA_VERSION = 3;
 
 /**
  * An append-only event log (the source of truth for conversations), a key/value
@@ -47,6 +47,13 @@ export function openDatabase(location: string): DatabaseSync {
         expires_at TEXT NOT NULL
       );
       CREATE INDEX IF NOT EXISTS sessions_user ON sessions(user_id);
+    `);
+  }
+  if (version < 3) {
+    db.exec(`
+      ALTER TABLE users ADD COLUMN profile TEXT;
+      ALTER TABLE users ADD COLUMN google_sub TEXT;
+      CREATE UNIQUE INDEX IF NOT EXISTS users_google_sub ON users(google_sub) WHERE google_sub IS NOT NULL;
     `);
   }
   db.exec(`PRAGMA user_version = ${SCHEMA_VERSION}`);

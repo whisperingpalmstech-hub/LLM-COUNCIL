@@ -27,6 +27,6 @@ export function clearSessionCookie(req: IncomingMessage, res: ServerResponse): v
   res.setHeader("Set-Cookie", `${SESSION_COOKIE}=; Path=/; HttpOnly; SameSite=Lax; Max-Age=0${secure}`);
 }
 
-function isHttps(req: IncomingMessage): boolean {
+export function isHttps(req: IncomingMessage): boolean {
   return Boolean((req.socket as { encrypted?: boolean }).encrypted) || String(req.headers["x-forwarded-proto"] ?? "").split(",")[0].trim() === "https";
 }
