@@ -4,8 +4,10 @@
 import type { CaseMode, ChatMessage, CouncilMember } from "@synod/contracts";
 import { MODES } from "./modes.ts";
 
-/** At most this many model messages follow one user message, so a chat never runs away. */
-export const MAX_REPLIES_PER_TURN = 4;
+import type { Depth } from "@synod/contracts";
+
+/** How many model messages may follow one user message, by discussion length. */
+export const MAX_REPLIES: Record<Depth, number> = { quick: 4, standard: 8, thorough: 12 };
 const TRANSCRIPT_MESSAGES = 40;
 
 export function transcript(messages: ChatMessage[], userLabel = "User"): string {
@@ -16,23 +18,25 @@ export function transcript(messages: ChatMessage[], userLabel = "User"): string 
 }
 
 /** The moderator decides who has something genuinely new to add — or that nobody does. */
-export function moderatorPrompt(about: string, members: CouncilMember[], messages: ChatMessage[], repliesSoFar: number): string {
+export function moderatorPrompt(about: string, members: CouncilMember[], messages: ChatMessage[], repliesSoFar: number, budget: number, resumed = false): string {
   const roster = members.map((m) => `- id: ${m.id} | name: ${m.label}`).join("\n");
   const last = messages.at(-1);
+  const left = budget - repliesSoFar;
+  const situation = resumed
+    ? "The user asked the panel to keep discussing. Pick 1-2 panellists who would push the discussion forward: test the weakest point so far, raise what hasn't been considered, or settle an open disagreement."
+    : repliesSoFar === 0
+      ? `The user just wrote. Pick ${members.length > 2 ? "2-3" : members.length > 1 ? "2" : "1"} panellists to open the discussion, chosen for different angles. Even when the answer seems clear, a second voice should check or sharpen it.`
+      : `${last?.author.kind === "model" ? last.author.label : "Someone"} just replied (${left} messages left before the user's turn). Keep the discussion going while it is productive: someone disagrees or would correct a claim, a question was put to a panellist, an important angle is missing, or a claim needs checking. Pick 1-2 panellists. Pick nobody once the panel has converged, is repeating itself, or the user clearly needs to answer something.`;
   return `${about}
 
-You moderate a group chat between a professional and a panel of AI models:
+You moderate a live group chat between a professional and a panel of AI models:
 ${roster}
 
 Conversation so far:
 ${transcript(messages)}
 
-${
-  repliesSoFar === 0
-    ? "The user just wrote. Pick the 1-3 panellists who would add the most: different expertise, a real disagreement, or a missing angle. Prefer fewer when the question is simple."
-    : `${last?.author.kind === "model" ? last.author.label : "Someone"} just replied. Pick at most 1 panellist ONLY if they would materially correct, challenge, or extend what was just said, or if they were directly asked something. Otherwise pick nobody so the user can respond.`
-}
-Never pick someone just to agree or repeat a point.
+${situation}
+Never pick someone just to agree or repeat a point. Vary who speaks; don't let one panellist dominate.
 Return JSON: {"speakers": [panellist ids in speaking order], "reason": "a few words, e.g. 'Gemini disagrees on dosing'"}`;
 }
 
@@ -71,6 +75,7 @@ Write the conclusion the user needs: lead with the answer, keep real disagreemen
  */
 export function mentioned(text: string, members: CouncilMember[]): CouncilMember[] {
   const lower = text.toLowerCase();
+  if (/@(everyone|all|panel)(?![\w.-])/.test(lower)) return members;
   const has = (name: string) => new RegExp(`@${name.toLowerCase().replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}(?![\\w.-])`).test(lower);
   const forms: ((m: CouncilMember) => string)[] = [(m) => m.label, (m) => m.label.split(" ").slice(0, 2).join(" "), (m) => m.label.split(" ")[0]];
   const found = new Set<CouncilMember>();

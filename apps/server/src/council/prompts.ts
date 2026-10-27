@@ -48,11 +48,11 @@ export function questionBlock(ctx: TurnContext): string {
 export function clarifyPrompt(ctx: TurnContext, mode: CaseMode): string {
   return `${questionBlock(ctx)}
 
-Before a council of advisers answers this, decide whether to ask the user ONE clarifying question.
+Before a council of advisers answers this, decide whether to ask the user a few quick clarifying questions.
 Ask when the best answer depends on specifics of the user's situation that the message and earlier conversation do not give. In this kind of case that usually means: ${MODES[mode].clarifyFocus}. Advice built on guessed context is generic; one good question makes it specific.
 Do not ask for factual or general-knowledge questions, when the user already gave enough context, or merely to confirm something obvious.
-If you ask, make it a single question that gathers the most decision-relevant context at once.
-Return JSON: {"needed": boolean, "question": string}`;
+If you ask, ask 1-3 questions, most important first, each about one fact. Make them fast to answer: give 2-5 short, mutually exclusive options (a few words each) that cover the likely answers; the user can always write their own. Use "multiple": true only when several options can apply at once. Use an empty options list only when no sensible options exist (e.g. a specific number or date).
+Return JSON: {"needed": boolean, "questions": [{"question": string, "options": string[], "multiple": boolean}]}`;
 }
 
 /** Route a case to a mode from its first message. */

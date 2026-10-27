@@ -10,6 +10,7 @@ import { Button } from "../ui/button";
 import { BriefCard } from "./BriefCard";
 import type { PanelTab } from "./CouncilPanel";
 import { CouncilProgress } from "./CouncilProgress";
+import { IntakeForm } from "./IntakeForm";
 
 export function TurnBlock({
   conversationId,
@@ -33,7 +34,7 @@ export function TurnBlock({
       ) : (
         <>
           <UserCase turn={turn} />
-          {turn.clarification && <Intake conversationId={conversationId} turn={turn} />}
+          {turn.clarification && (turn.clarification.questions?.length ? <IntakeForm conversationId={conversationId} turn={turn} /> : <Intake conversationId={conversationId} turn={turn} />)}
           {turn.clarification?.answer !== undefined || !turn.clarification ? <CouncilProgress turn={turn} onOpenPanel={onOpenPanel} /> : null}
         </>
       )}

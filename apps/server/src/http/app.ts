@@ -234,6 +234,7 @@ export function createApp({ config, store, engine, providers, search, transcribe
   });
   // ---- Discuss mode ----
   const sendOptions = (req: Request) => ({
+    depth: ["quick", "standard", "thorough"].includes(req.body?.depth) ? (req.body.depth as "quick") : undefined,
     timezone: typeof req.body?.timezone === "string" ? req.body.timezone.slice(0, 64) : undefined,
     profile: req.user!.profile,
     userId: req.user!.id
@@ -241,6 +242,11 @@ export function createApp({ config, store, engine, providers, search, transcribe
   api.post("/conversations/:id/chat", async (req, res) => {
     owned(String(req.params.id), req.user);
     await engine.chat(String(req.params.id), String(req.body?.text ?? ""), sendOptions(req));
+    res.status(202).json({ ok: true });
+  });
+  api.post("/conversations/:id/chat/continue", (req, res) => {
+    owned(String(req.params.id), req.user);
+    engine.continueDiscussion(String(req.params.id), sendOptions(req));
     res.status(202).json({ ok: true });
   });
   api.post("/conversations/:id/chat/stop", (req, res) => {

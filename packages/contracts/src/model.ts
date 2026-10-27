@@ -215,6 +215,16 @@ export interface CaseContext {
   profile?: UserProfile;
 }
 
+/** One intake question: pick from options, or write your own. */
+export interface IntakeQuestion {
+  id: string;
+  question: string;
+  /** 2-5 short options; empty means a free-text answer. */
+  options: string[];
+  /** Several options may apply. */
+  multiple?: boolean;
+}
+
 export type TurnStatus = "running" | "awaiting_clarification" | "completed" | "failed";
 
 export interface Turn {
@@ -235,7 +245,8 @@ export interface Turn {
   context?: CaseContext;
   /** Produced by "Wrap up" from a group discussion rather than a council run. */
   wrapUp?: boolean;
-  clarification?: { question: string; answer?: string };
+  /** Intake before the council starts. `question` is the readable summary; `questions` the structured form. */
+  clarification?: { question: string; questions?: IntakeQuestion[]; answer?: string };
   research: SearchResult[];
   stage1: Stage1Response[];
   stage2: Stage2Review[];

@@ -8,6 +8,7 @@ import { navigate } from "~/lib/router";
 import { cn, firstName } from "~/lib/utils";
 import { Composer } from "./Composer";
 import { DepthPicker } from "./DepthPicker";
+import { memberMentions, newCaseCommands } from "~/lib/commands";
 import { ModelLogo } from "./ModelLogo";
 import { Button } from "./ui/button";
 
@@ -158,6 +159,15 @@ export function NewCase({ info, onOpenSidebar }: { info: ServerInfo | null; onOp
             onRemoveFile={(id) => setFiles((cur) => cur.filter((_, i) => String(i) !== id))}
             voice={Boolean(info?.voice.available)}
             footer={kind === "council" ? <DepthPicker value={effectiveDepth} onChange={setDepth} /> : undefined}
+            mentions={kind === "chat" && seats ? memberMentions(seats.members) : []}
+            commands={newCaseCommands({
+              setKind: (k) => {
+                setKind(k);
+                localStorage.setItem("synod.kind", k);
+              },
+              setMode: choose,
+              setDepth
+            })}
             onSend={start}
           />
           <div className="mt-3 flex flex-wrap items-center justify-between gap-2 px-2 text-muted-foreground text-xs">

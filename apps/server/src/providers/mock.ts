@@ -45,7 +45,13 @@ export class MockProvider implements Provider {
         const question = prompt.match(/Question:\n([\s\S]*?)(\n\n|$)/)?.[1] ?? prompt;
         return JSON.stringify(
           question.length < 40 && !/clarifying answer/i.test(prompt)
-            ? { needed: true, question: "What outcome would make this decision a success for you, and by when?" }
+            ? {
+                needed: true,
+                questions: [
+                  { question: "What would make this a success?", options: ["Lower cost", "Faster delivery", "Less risk"], multiple: true },
+                  { question: "When do you need to decide?", options: ["This week", "This month", "This quarter"] }
+                ]
+              }
             : { needed: false, question: "" }
         );
       }
@@ -63,6 +69,7 @@ export class MockProvider implements Provider {
       case "moderate": {
         const ids = [...prompt.matchAll(/- id: (\S+) \|/g)].map((m) => m[1]);
         const fresh = prompt.includes("The user just wrote");
+        if (prompt.includes("keep discussing")) return JSON.stringify({ speakers: ids.slice(-1), reason: "Pushes the discussion forward" });
         return JSON.stringify(fresh ? { speakers: ids.slice(0, 2), reason: "Two different angles" } : { speakers: [], reason: "" });
       }
       case "chat": {

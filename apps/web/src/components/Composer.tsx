@@ -4,6 +4,7 @@ import QRCode from "qrcode";
 import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from "react";
 import { api } from "~/lib/api";
 import { cn } from "~/lib/utils";
+import { ComposerMenu, detectTrigger, filterEntries, type CommandItem, type MentionItem } from "./ComposerMenu";
 import { Button } from "./ui/button";
 
 export interface ComposerFile {
@@ -27,6 +28,8 @@ export function Composer({
   onRemoveFile,
   onSend,
   onStop,
+  mentions = [],
+  commands = [],
   size = "default"
 }: {
   placeholder: string;
@@ -44,8 +47,32 @@ export function Composer({
   onRemoveFile?: (id: string) => void;
   onSend: () => void | Promise<void>;
   onStop?: () => void;
+  /** "@" menu entries (e.g. council members). */
+  mentions?: MentionItem[];
+  /** "/" menu entries. */
+  commands?: CommandItem[];
   size?: "default" | "hero";
 }) {
+  const [caret, setCaret] = useState(0);
+  const [active, setActive] = useState(0);
+  const [dismissed, setDismissed] = useState<string | null>(null);
+  // Where the caret should land after a menu pick; applied in the same commit as the new value.
+  const pendingCaret = useRef<number | null>(null);
+  const trigger = (mentions.length || commands.length) && !disabled ? detectTrigger(value, caret) : null;
+  const triggerKey = trigger ? `${trigger.kind}:${trigger.start}` : null;
+  const menuOpen = Boolean(trigger) && triggerKey !== dismissed;
+  const apply = (replacement: string, run?: () => void) => {
+    if (!trigger) return;
+    const next = value.slice(0, trigger.start) + replacement + value.slice(trigger.end);
+    const pos = trigger.start + replacement.length;
+    pendingCaret.current = run ? null : pos;
+    onValueChange(run ? next.trim() : next);
+    setActive(0);
+    setCaret(pos);
+    if (run) run();
+  };
+  const entries = menuOpen && trigger ? filterEntries(trigger, mentions, commands, apply) : [];
+  const trackCaret = (el: HTMLTextAreaElement) => setCaret(el.selectionStart ?? el.value.length);
   const textarea = useRef<HTMLTextAreaElement>(null);
   const fileInput = useRef<HTMLInputElement>(null);
   const [error, setError] = useState<string | null>(null);
@@ -56,6 +83,11 @@ export function Composer({
   useLayoutEffect(() => {
     const el = textarea.current;
     if (!el) return;
+    if (pendingCaret.current !== null) {
+      el.focus();
+      el.setSelectionRange(pendingCaret.current, pendingCaret.current);
+      pendingCaret.current = null;
+    }
     el.style.height = "0px";
     el.style.height = `${Math.min(el.scrollHeight, size === "hero" ? 360 : 280)}px`;
   }, [value, size]);
@@ -104,6 +136,9 @@ export function Composer({
           void attach(e.dataTransfer.files);
         }}
       >
+        {entries.length > 0 && trigger && (
+          <ComposerMenu entries={entries} active={Math.min(active, entries.length - 1)} onHover={setActive} title={trigger.kind === "mention" ? "Ask someone directly" : "Commands"} />
+        )}
         {files.length > 0 && (
           <div className="flex flex-wrap gap-1.5 px-3 pt-3">
             {files.map((f) => (
@@ -125,8 +160,30 @@ export function Composer({
           rows={size === "hero" ? 4 : 2}
           disabled={disabled}
           placeholder={placeholder}
-          onChange={(e) => onValueChange(e.target.value)}
+          onChange={(e) => {
+            onValueChange(e.target.value);
+            trackCaret(e.target);
+            setActive(0);
+          }}
+          onSelect={(e) => trackCaret(e.currentTarget)}
           onKeyDown={(e) => {
+            if (entries.length && !e.nativeEvent.isComposing) {
+              if (e.key === "ArrowDown" || e.key === "ArrowUp") {
+                e.preventDefault();
+                setActive((i) => (i + (e.key === "ArrowDown" ? 1 : entries.length - 1)) % entries.length);
+                return;
+              }
+              if (e.key === "Enter" || e.key === "Tab") {
+                e.preventDefault();
+                entries[Math.min(active, entries.length - 1)].pick();
+                return;
+              }
+              if (e.key === "Escape") {
+                e.preventDefault();
+                setDismissed(triggerKey);
+                return;
+              }
+            }
             if (e.key === "Enter" && !e.shiftKey && !e.nativeEvent.isComposing) {
               e.preventDefault();
               void send();

@@ -40,7 +40,8 @@ export const api = {
   conversations: () => request<ConversationSummary[]>("/api/conversations"),
   conversation: (id: string) => request<Conversation>(`/api/conversations/${id}`),
   createConversation: (mode: CaseMode | "auto", kind: "council" | "chat" = "council") => post<Conversation>("/api/conversations", { mode, kind }),
-  chat: (id: string, text: string) => post(`/api/conversations/${id}/chat`, { text, timezone: Intl.DateTimeFormat().resolvedOptions().timeZone }),
+  chat: (id: string, text: string, depth?: Depth) => post(`/api/conversations/${id}/chat`, { text, depth, timezone: Intl.DateTimeFormat().resolvedOptions().timeZone }),
+  continueChat: (id: string, depth?: Depth) => post(`/api/conversations/${id}/chat/continue`, { depth, timezone: Intl.DateTimeFormat().resolvedOptions().timeZone }),
   stopChat: (id: string) => post(`/api/conversations/${id}/chat/stop`),
   wrapUp: (id: string) => post<{ turnId: string }>(`/api/conversations/${id}/wrap-up`, { timezone: Intl.DateTimeFormat().resolvedOptions().timeZone }),
   updateConversation: (id: string, patch: { title?: string; archived?: boolean; mode?: CaseMode }) =>

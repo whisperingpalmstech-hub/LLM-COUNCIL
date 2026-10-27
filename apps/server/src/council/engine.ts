@@ -12,6 +12,7 @@ import {
   type CouncilConfig,
   type ChatMessage,
   type CouncilMember,
+  type IntakeQuestion,
   type Depth,
   type Stage1Response,
   type Stage2Review,
@@ -26,7 +27,7 @@ import { errorMessage } from "../providers/http.ts";
 import type { ProviderRegistry } from "../providers/registry.ts";
 import type { ImageInput } from "../providers/types.ts";
 import { extractJson, normalizeBrief } from "./brief.ts";
-import { chatSystem, chatTurnPrompt, MAX_REPLIES_PER_TURN, mentioned, moderatorPrompt, wrapUpPrompt } from "./discussion.ts";
+import { chatSystem, chatTurnPrompt, MAX_REPLIES, mentioned, moderatorPrompt, wrapUpPrompt } from "./discussion.ts";
 import { aboutBlock, answerSystem, briefPrompt, buildContext, clarifyPrompt, classifyPrompt, questionBlock, revisePrompt, reviewPrompt, synthesisPrompt, type TurnContext } from "./prompts.ts";
 import { aggregateRankings, assignLabels, parseRanking } from "./ranking.ts";
 import { CLASSIFIER, RECIPES } from "./recipes.ts";
@@ -163,6 +164,14 @@ export class CouncilEngine {
 
   // ---- Discuss mode -----------------------------------------------------------
 
+  /** Let the panel keep talking without a new user message. */
+  continueDiscussion(conversationId: string, options: SendOptions = {}): void {
+    const conversation = this.deps.store.require(conversationId);
+    if (conversation.kind !== "chat") throw badRequest("This case isn't a discussion.");
+    if (!conversation.chat.length) throw badRequest("Start the discussion first.");
+    if (!this.discussions.has(conversationId)) this.startDiscussion(conversationId, options, true);
+  }
+
   /** Post a user message to a group discussion; starts the moderated replies if none are running. */
   async chat(conversationId: string, text: string, options: SendOptions = {}): Promise<void> {
     let conversation = this.deps.store.require(conversationId);
@@ -203,11 +212,11 @@ export class CouncilEngine {
     return turnId;
   }
 
-  private startDiscussion(conversationId: string, options: SendOptions): void {
+  private startDiscussion(conversationId: string, options: SendOptions, resumed = false): void {
     const controller = new AbortController();
     this.discussions.set(conversationId, controller);
     this.deps.store.append({ type: "chat.busy", conversationId, busy: true });
-    void this.discuss(conversationId, options, controller.signal)
+    void this.discuss(conversationId, options, controller.signal, resumed)
       .catch((error) => {
         if (!controller.signal.aborted) console.error(`[discuss] ${conversationId} failed`, error);
       })
@@ -217,11 +226,12 @@ export class CouncilEngine {
       });
   }
 
-  private async discuss(conversationId: string, options: SendOptions, signal: AbortSignal): Promise<void> {
+  private async discuss(conversationId: string, options: SendOptions, signal: AbortSignal, resumed = false): Promise<void> {
     const { store, providers } = this.deps;
     const conversation = store.require(conversationId);
     const council = this.resolve(this.council(options.userId), conversation.mode);
     const members = council.members;
+    const budget = MAX_REPLIES[options.depth ?? council.depth];
     const about = aboutBlock({ date: todayIn(options.timezone), ...(options.timezone ? { timezone: options.timezone } : {}), ...(options.profile ? { profile: options.profile } : {}) });
     const moderator = this.autoAvailable() ? CLASSIFIER : council.chairman;
     const userCount = () => store.require(conversationId).chat.filter((m) => m.author.kind === "user").length;
@@ -240,11 +250,11 @@ export class CouncilEngine {
         reason = "You asked them directly";
       } else {
         try {
-          const reply = await providers.complete(moderator, { purpose: "moderate", json: true, messages: [{ role: "user", content: moderatorPrompt(about, members, chat, replies) }], signal });
+          const reply = await providers.complete(moderator, { purpose: "moderate", json: true, messages: [{ role: "user", content: moderatorPrompt(about, members, chat, replies, budget, resumed && replies === 0) }], signal });
           const parsed = extractJson(reply) as { speakers?: unknown; reason?: unknown };
           const ids = Array.isArray(parsed.speakers) ? parsed.speakers.map(String) : [];
           speakers = ids.map((id) => members.find((m) => m.id === id)).filter((m): m is CouncilMember => Boolean(m));
-          speakers = [...new Set(speakers)].slice(0, replies === 0 ? 3 : 1);
+          speakers = [...new Set(speakers)].slice(0, replies === 0 && !resumed ? 3 : 2);
           reason = typeof parsed.reason === "string" ? parsed.reason.slice(0, 120) : "";
         } catch (error) {
           if (signal.aborted) return;
@@ -258,7 +268,7 @@ export class CouncilEngine {
       store.append({ type: "chat.moderated", conversationId, note: { id: crypto.randomUUID(), speakers: speakers.map((s) => s.id), reason, at: new Date().toISOString() } });
 
       for (const speaker of speakers) {
-        if (signal.aborted || replies >= MAX_REPLIES_PER_TURN) break;
+        if (signal.aborted || replies >= budget) break;
         const draft = throttle((text: string) => store.publishDraft({ type: "draft", conversationId, turnId: "chat", key: `chat:${speaker.id}`, text }), 120);
         const latest = store.require(conversationId).chat;
         let message: ChatMessage;
@@ -282,9 +292,10 @@ export class CouncilEngine {
       if (userCount() > seenUsers) {
         seenUsers = userCount();
         replies = 0;
+        resumed = false;
         continue;
       }
-      if (replies >= MAX_REPLIES_PER_TURN) break;
+      if (replies >= budget) break;
     }
   }
 
@@ -362,10 +373,10 @@ export class CouncilEngine {
     // Clarify: pause the turn and wait for the user if one question is essential.
     if (turn.council.clarify && !turn.clarification) {
       stage("clarify");
-      const question = await this.clarifyingQuestion(chairman, context(), mode, signal, images);
+      const intake = await this.clarifyingQuestions(chairman, context(), mode, signal, images);
       if (signal.aborted) return;
-      if (question) {
-        emit({ type: "turn.clarification_requested", conversationId, turnId, question });
+      if (intake) {
+        emit({ type: "turn.clarification_requested", conversationId, turnId, question: intake.map((q) => q.question).join(" "), questions: intake });
         return;
       }
     }
@@ -584,12 +595,21 @@ export class CouncilEngine {
     }
   }
 
-  private async clarifyingQuestion(chairman: CouncilMember, ctx: TurnContext, mode: CaseMode, signal: AbortSignal, images?: ImageInput[]): Promise<string | null> {
+  private async clarifyingQuestions(chairman: CouncilMember, ctx: TurnContext, mode: CaseMode, signal: AbortSignal, images?: ImageInput[]): Promise<IntakeQuestion[] | null> {
     try {
       const reply = await this.deps.providers.complete(chairman, { purpose: "clarify", json: true, messages: [{ role: "user", content: clarifyPrompt(ctx, mode), images }], signal });
-      const parsed = extractJson(reply) as { needed?: unknown; question?: unknown };
-      const question = typeof parsed.question === "string" ? parsed.question.trim() : "";
-      return parsed.needed === true && question ? question.slice(0, 500) : null;
+      const parsed = extractJson(reply) as { needed?: unknown; question?: unknown; questions?: unknown };
+      if (parsed.needed !== true) return null;
+      const raw = Array.isArray(parsed.questions) ? parsed.questions : typeof parsed.question === "string" ? [{ question: parsed.question, options: [] }] : [];
+      const questions = raw
+        .slice(0, 3)
+        .map((q, i): IntakeQuestion => {
+          const o = (q && typeof q === "object" ? q : {}) as Record<string, unknown>;
+          const options = Array.isArray(o.options) ? [...new Set(o.options.map((x) => String(x).trim().slice(0, 60)).filter(Boolean))].slice(0, 5) : [];
+          return { id: `q${i + 1}`, question: String(o.question ?? "").trim().slice(0, 240), options: options.length >= 2 ? options : [], ...(o.multiple === true && options.length >= 2 ? { multiple: true } : {}) };
+        })
+        .filter((q) => q.question);
+      return questions.length ? questions : null;
     } catch (error) {
       // Clarification is a nicety; never block the council on it.
       if (!signal.aborted) console.warn("[council] clarify step skipped:", errorMessage(error));

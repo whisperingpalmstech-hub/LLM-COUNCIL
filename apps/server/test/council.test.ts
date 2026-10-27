@@ -427,3 +427,32 @@ test("@mentions resolve to the most specific panellist", async () => {
   assert.deepEqual(mentioned("@Claude what do you think?", members).map((m) => m.id), [], "ambiguous first name matches nobody");
   assert.deepEqual(mentioned("email me at x@gemini.com", members).map((m) => m.id), [], "not a mention");
 });
+
+test("Discuss: @everyone brings in the whole panel, and 'keep discussing' resumes without a user message", async () => {
+  const { engine, store } = setup();
+  engine.saveCouncil(council());
+  const id = engine.createConversation(undefined, "general", undefined, "chat");
+  await engine.chat(id, "@everyone one-line position and confidence, please.");
+  await discussionIdle(engine, store, id);
+  assert.deepEqual(store.require(id).chat.filter((m) => m.author.kind === "model").map((m) => m.author.kind === "model" && m.author.memberId), ["a", "b", "c"]);
+  const before = store.require(id).chat.length;
+  engine.continueDiscussion(id);
+  await discussionIdle(engine, store, id);
+  const after = store.require(id).chat;
+  assert.equal(after.length, before + 1);
+  assert.equal(after.at(-1)?.author.kind === "model" && after.at(-1)?.author.kind === "model" ? (after.at(-1)!.author as { memberId: string }).memberId : null, "c");
+  assert.equal(store.require(id).notes.at(-1)?.reason, "Pushes the discussion forward");
+});
+
+test("intake asks up to 3 multiple-choice questions", async () => {
+  const { engine, store } = setup();
+  engine.saveCouncil(council({ clarify: true }));
+  const id = engine.createConversation();
+  await engine.sendMessage(id, "Should I hire?");
+  await engine.idle();
+  const c = store.require(id).turns[0].clarification!;
+  assert.equal(c.questions?.length, 2);
+  assert.deepEqual(c.questions?.[0], { id: "q1", question: "What would make this a success?", options: ["Lower cost", "Faster delivery", "Less risk"], multiple: true });
+  assert.equal(c.questions?.[1].multiple, undefined);
+  assert.match(c.question, /success.*decide/);
+});

@@ -6,6 +6,7 @@ import type {
   Brief,
   CaseContext,
   ChatMessage,
+  IntakeQuestion,
   ModeratorNote,
   CaseMode,
   Conversation,
@@ -34,7 +35,7 @@ export type ConversationEvent =
   | E<"turn.started", { turnId: string; prompt: string; mode: CaseMode; council: CouncilConfig; rounds?: number; context?: CaseContext; wrapUp?: boolean }>
   | E<"turn.stage_started", { turnId: string; stage: TurnStage; cycle?: number }>
   | E<"turn.converged", { turnId: string; cycle: number }>
-  | E<"turn.clarification_requested", { turnId: string; question: string }>
+  | E<"turn.clarification_requested", { turnId: string; question: string; questions?: IntakeQuestion[] }>
   | E<"turn.clarification_answered", { turnId: string; answer: string }>
   | E<"turn.research_completed", { turnId: string; results: SearchResult[] }>
   | E<"turn.stage1_response", { turnId: string; response: Stage1Response }>
@@ -143,10 +144,10 @@ export function applyEvent(state: Conversation, event: ConversationEvent): Conve
       patchTurn(() => ({ convergedEarly: true }));
       break;
     case "turn.clarification_requested":
-      patchTurn(() => ({ status: "awaiting_clarification", clarification: { question: event.question } }));
+      patchTurn(() => ({ status: "awaiting_clarification", clarification: { question: event.question, ...(event.questions?.length ? { questions: event.questions } : {}) } }));
       break;
     case "turn.clarification_answered":
-      patchTurn((t) => ({ status: "running", clarification: { question: t.clarification?.question ?? "", answer: event.answer } }));
+      patchTurn((t) => ({ status: "running", clarification: { ...t.clarification, question: t.clarification?.question ?? "", answer: event.answer } }));
       break;
     case "turn.research_completed":
       patchTurn(() => ({ research: event.results }));

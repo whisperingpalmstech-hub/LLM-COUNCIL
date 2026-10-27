@@ -1,7 +1,9 @@
 // Discuss mode: a moderated group chat between the user and the council's models.
-import { AtSign, FileCheck2, Menu, MessagesSquare, Square } from "lucide-react";
+import { AtSign, FileCheck2, Menu, MessagesSquare, Play, Square } from "lucide-react";
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
-import type { ChatMessage, Conversation, CouncilMember, ModeratorNote, ServerInfo, Turn } from "@synod/contracts";
+import type { ChatMessage, Conversation, CouncilMember, Depth, ModeratorNote, ServerInfo, Turn } from "@synod/contracts";
+import { discussionCommands, memberMentions } from "~/lib/commands";
+import { LengthPicker } from "../DepthPicker";
 import { api } from "~/lib/api";
 import { MODE_UI } from "~/lib/modes";
 import { useDraft, useDraftRev } from "~/lib/store";
@@ -20,6 +22,7 @@ export function DiscussionView({ conversation, info, onOpenSidebar, onOpenPanel 
   const [draft, setDraft] = useState("");
   const [council, setCouncil] = useState<CouncilMember[]>([]);
   const [error, setError] = useState<string | null>(null);
+  const [length, setLength] = useState<Depth>("standard");
   const scroller = useRef<HTMLDivElement>(null);
   const pinned = useRef(true);
   const draftRev = useDraftRev();
@@ -57,9 +60,17 @@ export function DiscussionView({ conversation, info, onOpenSidebar, onOpenPanel 
   const lastNote = conversation.notes.at(-1);
   const typing = conversation.chatBusy && lastNote ? lastNote.speakers.filter((s) => !conversation.chat.some((m) => m.at >= lastNote.at && m.author.kind === "model" && m.author.memberId === s)) : [];
 
+  const fail = (e: unknown) => setError((e as Error).message);
+  const actions = {
+    continue: () => void api.continueChat(id, length).catch(fail),
+    wrapUp: () => void api.wrapUp(id).catch(fail),
+    stop: () => void api.stopChat(id).catch(fail)
+  };
+  const canContinue = !conversation.chatBusy && !wrapping && conversation.chat.some((m) => m.author.kind === "model");
+
   const send = async () => {
     setError(null);
-    await api.chat(id, draft);
+    await api.chat(id, draft, length);
     setDraft("");
     pinned.current = true;
   };
@@ -142,16 +153,25 @@ export function DiscussionView({ conversation, info, onOpenSidebar, onOpenPanel 
         <Composer
           value={draft}
           onValueChange={setDraft}
-          placeholder={conversation.chat.length ? "Reply to the panel, or @mention someone…" : "Start the discussion…"}
+          placeholder={conversation.chat.length ? "Reply, @mention a model, or type / for commands…" : "Start the discussion…"}
           files={[]}
           onAttach={() => setError("Attachments aren't supported in discussions yet. Start a council case to attach files.")}
           voice={Boolean(info?.voice.available)}
+          mentions={memberMentions(council)}
+          commands={discussionCommands(actions)}
           footer={
-            conversation.chatBusy ? (
-              <Button variant="outline" size="sm" className="rounded-full" onClick={() => api.stopChat(id)} title="Stop the panel">
-                <Square className="size-2.5 fill-current" /> Stop
-              </Button>
-            ) : undefined
+            <>
+              <LengthPicker value={length} onChange={setLength} />
+              {conversation.chatBusy ? (
+                <Button variant="outline" size="sm" className="rounded-full" onClick={actions.stop} title="Stop the panel">
+                  <Square className="size-2.5 fill-current" /> Stop
+                </Button>
+              ) : canContinue ? (
+                <Button variant="outline" size="sm" className="rounded-full" onClick={actions.continue} title="Let the panel keep discussing (/continue)">
+                  <Play className="size-3" /> Keep discussing
+                </Button>
+              ) : null}
+            </>
           }
           onSend={send}
         />

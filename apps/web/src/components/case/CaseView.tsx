@@ -7,6 +7,7 @@ import { useConversation, useDraftRev } from "~/lib/store";
 import { cn } from "~/lib/utils";
 import { Composer } from "../Composer";
 import { DepthPicker } from "../DepthPicker";
+import { depthCommands, PROMPT_COMMANDS } from "~/lib/commands";
 import { Button } from "../ui/button";
 import { CouncilPanel, type PanelTab } from "./CouncilPanel";
 import { DiscussionView } from "./DiscussionView";
@@ -104,6 +105,7 @@ export function CaseView({ id, info, onOpenSidebar }: { id: string; info: Server
             }}
             voice={Boolean(info?.voice.available)}
             footer={<DepthPicker value={depth} onChange={setDepth} />}
+            commands={[...depthCommands(setDepth), ...PROMPT_COMMANDS.map((c) => ({ ...c, insert: c.insert?.replace("@everyone ", "") }))]}
             phoneLink={() => api.uploadLink(id).then((r) => (r.url.startsWith("http") ? r.url : `${location.origin}${r.url}`))}
             onSend={async () => {
               await api.send(id, draft, { depth });
