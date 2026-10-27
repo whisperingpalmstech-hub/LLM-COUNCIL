@@ -18,6 +18,7 @@ class ClientStore {
   private listeners = new Set<Listener>();
   private socket: WebSocket | null = null;
   private retry = 0;
+  private stopped = false;
   private summaryTimer: number | undefined;
 
   subscribe = (listener: Listener) => {
@@ -30,6 +31,7 @@ class ClientStore {
   }
 
   connect() {
+    this.stopped = false;
     if (this.socket) return;
     const url = `${location.protocol === "https:" ? "wss" : "ws"}://${location.host}/ws`;
     const socket = new WebSocket(url);
@@ -69,7 +71,7 @@ class ClientStore {
       this.socket = null;
       this.connected = false;
       this.emit();
-      setTimeout(() => this.connect(), Math.min(10_000, 500 * 2 ** this.retry++));
+      if (!this.stopped) setTimeout(() => this.connect(), Math.min(10_000, 500 * 2 ** this.retry++));
     };
   }
 
@@ -80,6 +82,17 @@ class ClientStore {
     if (key === "synthesis") return Boolean(turn.synthesis);
     const memberId = key.slice("stage1:".length);
     return turn.stage1.some((r) => r.memberId === memberId);
+  }
+
+  /** On sign-out: close the socket and forget everything. */
+  reset() {
+    this.stopped = true;
+    this.socket?.close();
+    this.socket = null;
+    this.conversations = new Map();
+    this.summaries = [];
+    this.drafts = new Map();
+    this.emit();
   }
 
   async load(id: string) {

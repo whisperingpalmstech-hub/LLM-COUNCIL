@@ -1,5 +1,9 @@
 import type {
   Attachment,
+  AuthConfigResponse,
+  LoginRequest,
+  MeResponse,
+  SignupRequest,
   CaseMode,
   Conversation,
   ConversationSummary,
@@ -16,6 +20,7 @@ async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
     headers: init.body && typeof init.body === "string" ? { "Content-Type": "application/json", ...init.headers } : init.headers
   });
   if (!res.ok) {
+    if (res.status === 401 && !path.startsWith("/api/auth/")) window.dispatchEvent(new Event("synod:signed-out"));
     const body = await res.json().catch(() => null);
     throw new Error(body?.error ?? `Request failed (${res.status})`);
   }
@@ -38,7 +43,14 @@ export const api = {
   cancel: (id: string) => post(`/api/conversations/${id}/cancel`),
   handoff: (id: string, turnId: string) => post<HandoffResult>(`/api/conversations/${id}/turns/${turnId}/handoff`),
   briefUrl: (id: string, turnId: string) => `/api/conversations/${id}/turns/${turnId}/brief.md`,
-  upload: (id: string, body: UploadAttachmentRequest) => post<Attachment>(`/api/conversations/${id}/attachments`, body),
+  upload: (id: string, body: UploadAttachmentRequest, token?: string) =>
+    post<Attachment>(`/api/conversations/${id}/attachments${token ? `?token=${encodeURIComponent(token)}` : ""}`, body),
+  uploadLink: (id: string) => request<{ url: string }>(`/api/conversations/${id}/upload-link`),
+  authConfig: () => request<AuthConfigResponse>("/api/auth/config"),
+  me: () => request<MeResponse>("/api/auth/me"),
+  login: (body: LoginRequest) => post<MeResponse>("/api/auth/login", body),
+  signup: (body: SignupRequest) => post<MeResponse>("/api/auth/signup", body),
+  logout: () => post("/api/auth/logout"),
   transcribe: (audio: Blob, language = "auto") =>
     request<TranscriptionResponse>(`/api/transcribe?language=${encodeURIComponent(language)}`, {
       method: "POST",

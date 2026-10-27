@@ -1,34 +1,46 @@
 import type { Server } from "node:http";
-import { WebSocketServer } from "ws";
-import type { ServerPush } from "@synod/contracts";
-import type { Config } from "../config.ts";
+import { WebSocketServer, type WebSocket } from "ws";
+import type { AuthUser, ServerPush } from "@synod/contracts";
+import type { Accounts } from "../auth/accounts.ts";
 import type { EventStore } from "../events/store.ts";
-import { isAuthorized } from "./auth.ts";
+import { sessionUser } from "./session.ts";
 
 /**
- * Push channel: every appended event is broadcast to every connected browser.
- * Clients load a conversation snapshot over REST, then fold pushed events into it.
- * On reconnect they refetch, so no replay protocol is needed.
+ * Push channel. Every appended event (and every streaming draft) goes to each
+ * connected browser whose signed-in user owns that conversation. Clients load a
+ * snapshot over REST and fold pushed events into it; on reconnect they refetch.
  */
-export function attachWebSocket(server: Server, store: EventStore, config: Config): WebSocketServer {
+export function attachWebSocket(server: Server, store: EventStore, accounts: Accounts): WebSocketServer {
   const wss = new WebSocketServer({ noServer: true });
+  const users = new WeakMap<WebSocket, AuthUser>();
+
   server.on("upgrade", (req, socket, head) => {
     if (new URL(req.url ?? "/", "http://x").pathname !== "/ws") return socket.destroy();
-    if (!isAuthorized(req, config.auth)) {
+    const user = sessionUser(req, accounts);
+    if (!user) {
       socket.write("HTTP/1.1 401 Unauthorized\r\n\r\n");
       return socket.destroy();
     }
-    wss.handleUpgrade(req, socket, head, (ws) => wss.emit("connection", ws, req));
+    wss.handleUpgrade(req, socket, head, (ws) => {
+      users.set(ws, user);
+      wss.emit("connection", ws, req);
+    });
   });
 
-  const unsubscribe = store.subscribe((event) => {
-    const message = JSON.stringify({ type: "event", event } satisfies ServerPush);
-    for (const client of wss.clients) if (client.readyState === client.OPEN) client.send(message);
-  });
-  const unsubscribeDrafts = store.subscribeDrafts((draft) => {
-    const message = JSON.stringify(draft satisfies ServerPush);
-    for (const client of wss.clients) if (client.readyState === client.OPEN) client.send(message);
-  });
+  const canSee = (user: AuthUser, conversationId: string) => {
+    const c = store.get(conversationId);
+    return Boolean(c && (c.ownerId ? c.ownerId === user.id : user.role === "admin"));
+  };
+  const broadcast = (conversationId: string, push: ServerPush) => {
+    const message = JSON.stringify(push);
+    for (const client of wss.clients) {
+      const user = users.get(client);
+      if (client.readyState === client.OPEN && user && canSee(user, conversationId)) client.send(message);
+    }
+  };
+
+  const unsubscribe = store.subscribe((event) => broadcast(event.conversationId, { type: "event", event }));
+  const unsubscribeDrafts = store.subscribeDrafts((draft) => broadcast(draft.conversationId, draft));
   wss.on("close", () => {
     unsubscribe();
     unsubscribeDrafts();

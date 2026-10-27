@@ -12,7 +12,11 @@ export interface Config {
   dataDir: string;
   webDistDir: string;
   publicBaseUrl: string | null;
-  auth: { username: string; password: string } | null;
+  /** Signs phone upload links. Generated and stored on first run when not set. */
+  secret: string | null;
+  signup: { mode: "invite" | "open" | "closed"; inviteCode: string | null };
+  /** Created on startup if there are no users yet. */
+  bootstrapAdmin: { email: string; password: string; name: string } | null;
   tls: { certPath: string; keyPath: string } | null;
   requestTimeoutMs: number;
   maxRetries: number;
@@ -30,7 +34,13 @@ export function loadConfig(env: Env = process.env): Config {
     dataDir,
     webDistDir: resolve(env.WEB_DIST_DIR || "./apps/web/dist"),
     publicBaseUrl: trimSlash(env.PUBLIC_BASE_URL) || null,
-    auth: env.SYNOD_ACCESS_PASSWORD ? { username: env.SYNOD_ACCESS_USERNAME || "synod", password: env.SYNOD_ACCESS_PASSWORD } : null,
+    secret: env.SYNOD_SECRET || null,
+    signup: {
+      mode: env.SYNOD_SIGNUP === "open" ? "open" : env.SYNOD_INVITE_CODE ? "invite" : "closed",
+      inviteCode: env.SYNOD_INVITE_CODE || null
+    },
+    bootstrapAdmin:
+      env.SYNOD_ADMIN_EMAIL && env.SYNOD_ADMIN_PASSWORD ? { email: env.SYNOD_ADMIN_EMAIL, password: env.SYNOD_ADMIN_PASSWORD, name: env.SYNOD_ADMIN_NAME || "Admin" } : null,
     tls: env.SYNOD_TLS_CERT_PATH && env.SYNOD_TLS_KEY_PATH ? { certPath: env.SYNOD_TLS_CERT_PATH, keyPath: env.SYNOD_TLS_KEY_PATH } : null,
     requestTimeoutMs: int(env.PROVIDER_REQUEST_TIMEOUT_MS, 120_000),
     maxRetries: int(env.PROVIDER_MAX_RETRIES, 1),

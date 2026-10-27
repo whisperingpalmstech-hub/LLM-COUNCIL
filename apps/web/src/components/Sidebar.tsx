@@ -1,10 +1,13 @@
-import { Archive, ArchiveRestore, PenSquare, Search, Settings2, X } from "lucide-react";
+import { Menu } from "@base-ui/react/menu";
+import { Archive, ArchiveRestore, ChevronsUpDown, LogOut, Monitor, Moon, PenSquare, Search, Settings2, Sun, X } from "lucide-react";
 import { useEffect, useState } from "react";
 import type { ConversationSummary } from "@synod/contracts";
 import { api } from "~/lib/api";
+import { signOut, useAuth } from "~/lib/auth";
 import { MODE_UI } from "~/lib/modes";
 import { navigate } from "~/lib/router";
 import { store, useConnected, useSummaries } from "~/lib/store";
+import { setTheme, useTheme, type ThemePreference } from "~/lib/theme";
 import { cn } from "~/lib/utils";
 import { Button } from "./ui/button";
 import { Kbd } from "./ui/misc";
@@ -19,9 +22,10 @@ export function Sidebar({
   activeId: string | null;
   open: boolean;
   onClose: () => void;
-  onSettings: () => void;
+  onSettings?: () => void;
   onSearch: () => void;
 }) {
+  const auth = useAuth();
   const summaries = useSummaries();
   const connected = useConnected();
   const [showArchived, setShowArchived] = useState(false);
@@ -44,11 +48,11 @@ export function Sidebar({
       >
         <div className="flex h-12 items-center justify-between px-3">
           <a
-            href="/"
+            href="/new"
             className="flex items-center gap-2 font-semibold tracking-tight"
             onClick={(e) => {
               e.preventDefault();
-              navigate("/");
+              navigate("/new");
             }}
           >
             <Logo />
@@ -63,7 +67,7 @@ export function Sidebar({
         </div>
 
         <div className="space-y-0.5 px-2">
-          <SidebarAction icon={<PenSquare />} label="New case" hint={<Kbd>⇧⌘O</Kbd>} onClick={() => navigate("/")} />
+          <SidebarAction icon={<PenSquare />} label="New case" hint={<Kbd>⇧⌘O</Kbd>} onClick={() => navigate("/new")} />
           <SidebarAction icon={<Search />} label="Search" hint={<Kbd>⌘K</Kbd>} onClick={onSearch} />
         </div>
 
@@ -79,17 +83,84 @@ export function Sidebar({
           {!visible.length && <p className="px-2 py-6 text-center text-muted-foreground text-xs">{showArchived ? "No archived cases." : "No cases yet."}</p>}
         </nav>
 
-        <div className="flex items-center justify-between border-t px-2 py-2">
-          <Button variant="ghost-muted" size="sm" onClick={() => setShowArchived((v) => !v)}>
+        <div className="px-2">
+          <button
+            type="button"
+            onClick={() => setShowArchived((v) => !v)}
+            className="flex h-8 w-full cursor-pointer items-center gap-2 rounded-lg px-2 text-muted-foreground text-sm transition-colors hover:bg-sidebar-row-hover hover:text-foreground [&_svg]:size-4"
+          >
             <Archive />
-            {showArchived ? "Active cases" : "Archived"}
-          </Button>
-          <Button variant="ghost-muted" size="icon-sm" onClick={onSettings} aria-label="Council settings" title="Council settings">
-            <Settings2 />
-          </Button>
+            {showArchived ? "Back to active cases" : "Archived cases"}
+          </button>
         </div>
+        {auth.status === "signed-in" && <AccountMenu name={auth.user.name} email={auth.user.email} onSettings={onSettings} />}
       </aside>
     </>
+  );
+}
+
+function AccountMenu({ name, email, onSettings }: { name: string; email: string; onSettings?: () => void }) {
+  const theme = useTheme();
+  const initials = name.split(/\s+/).map((p) => p[0]).slice(0, 2).join("").toUpperCase();
+  const item = "flex h-8 cursor-pointer items-center gap-2.5 rounded-lg px-2.5 text-sm outline-none data-[highlighted]:bg-accent [&_svg]:size-4 [&_svg]:text-muted-foreground";
+  return (
+    <div className="border-t p-2">
+      <Menu.Root>
+        <Menu.Trigger className="flex w-full cursor-pointer items-center gap-2.5 rounded-xl p-1.5 text-left transition-colors hover:bg-sidebar-row-hover data-[popup-open]:bg-sidebar-row-hover">
+          <span className="flex size-8 shrink-0 items-center justify-center rounded-full bg-foreground font-semibold text-background text-xs">{initials || "?"}</span>
+          <span className="min-w-0 flex-1">
+            <span className="block truncate font-medium text-sm">{name}</span>
+            <span className="block truncate text-2xs text-muted-foreground">{email}</span>
+          </span>
+          <ChevronsUpDown className="size-3.5 text-faint" />
+        </Menu.Trigger>
+        <Menu.Portal>
+          <Menu.Positioner side="top" align="start" sideOffset={6} className="z-50">
+            <Menu.Popup className="w-60 origin-[var(--transform-origin)] rounded-2xl border bg-popover p-1.5 shadow-[0_16px_40px_-12px_rgb(0_0_0/0.25)] outline-none transition-[opacity,scale] duration-150 ease-[var(--ease-out)] data-ending-style:scale-[0.97] data-ending-style:opacity-0 data-starting-style:scale-[0.97] data-starting-style:opacity-0">
+              <div className="px-2.5 pt-1.5 pb-2">
+                <p className="text-2xs text-muted-foreground">Appearance</p>
+                <div className="mt-1.5 grid grid-cols-3 gap-1 rounded-lg bg-muted p-0.5" role="radiogroup" aria-label="Theme">
+                  {(
+                    [
+                      ["system", Monitor, "System"],
+                      ["light", Sun, "Light"],
+                      ["dark", Moon, "Dark"]
+                    ] as [ThemePreference, typeof Sun, string][]
+                  ).map(([value, Icon, label]) => (
+                    <button
+                      key={value}
+                      type="button"
+                      role="radio"
+                      aria-checked={theme === value}
+                      aria-label={label}
+                      title={label}
+                      onClick={() => setTheme(value)}
+                      className={cn("flex h-7 cursor-pointer items-center justify-center rounded-md transition-colors", theme === value ? "bg-card text-foreground shadow-[0_1px_2px_rgb(0_0_0/8%)]" : "text-muted-foreground hover:text-foreground")}
+                    >
+                      <Icon className="size-3.5" />
+                    </button>
+                  ))}
+                </div>
+              </div>
+              {onSettings && (
+                <Menu.Item className={item} onClick={onSettings}>
+                  <Settings2 /> Council settings
+                </Menu.Item>
+              )}
+              <Menu.Item
+                className={item}
+                onClick={async () => {
+                  await signOut();
+                  navigate("/");
+                }}
+              >
+                <LogOut /> Sign out
+              </Menu.Item>
+            </Menu.Popup>
+          </Menu.Positioner>
+        </Menu.Portal>
+      </Menu.Root>
+    </div>
   );
 }
 
@@ -123,7 +194,7 @@ function CaseRow({ summary: s, active }: { summary: ConversationSummary; active:
           e.preventDefault();
           navigate(`/c/${s.id}`);
         }}
-        className="flex min-w-0 flex-1 items-center gap-2 px-2 py-1.5"
+        className="flex min-w-0 flex-1 items-center gap-2 px-2 py-1.5 group-hover:pr-9"
       >
         <Icon className={cn("size-3.5 shrink-0", mode.tint)} />
         <span className="min-w-0 flex-1 truncate text-sm">{s.title || "Untitled case"}</span>

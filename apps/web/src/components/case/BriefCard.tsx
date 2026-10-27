@@ -1,88 +1,138 @@
-import { AlertOctagon, CircleHelp, Download, GitCompareArrows, Handshake, Send } from "lucide-react";
-import { useState } from "react";
-import type { Brief, BriefItem, NextStep, Turn } from "@synod/contracts";
+// The second opinion, set like a document: a serif verdict, then the reasoning in quiet sections.
+import { AlertTriangle, Check, Copy, Download, Send } from "lucide-react";
+import { useEffect, useState } from "react";
+import type { Brief, BriefItem, CouncilMember, Turn } from "@synod/contracts";
 import { api } from "~/lib/api";
 import { MODE_UI } from "~/lib/modes";
 import { cn } from "~/lib/utils";
+import { ModelLogo } from "../ModelLogo";
 import { Button, buttonVariants } from "../ui/button";
-import { Badge, Eyebrow } from "../ui/misc";
+import { Badge, SectionTitle } from "../ui/misc";
+
+const LEVEL_WORD: Record<string, Record<NonNullable<BriefItem["level"]>, string>> = {
+  likelihood: { high: "Most likely", medium: "Possible", low: "Less likely" },
+  severity: { high: "Serious", medium: "Moderate", low: "Minor" },
+  priority: { high: "First", medium: "Next", low: "Later" },
+  strength: { high: "Strong", medium: "Moderate", low: "Weak" }
+};
+
+function levelKind(title: string): keyof typeof LEVEL_WORD {
+  const t = title.toLowerCase();
+  // Severity first: "Can't-miss diagnoses" is about danger, not likelihood.
+  if (/bug|risk|can.?t.?miss/.test(t)) return "severity";
+  if (/differential|diagnos|options/.test(t)) return "likelihood";
+  if (/argument/.test(t)) return "strength";
+  return "priority";
+}
 
 export function BriefCard({ conversationId, turn, brief, hermesConfigured }: { conversationId: string; turn: Turn; brief: Brief; hermesConfigured: boolean }) {
   const mode = MODE_UI[brief.mode];
   const ModeIcon = mode.icon;
+  // Animate the reveal only when the brief has just arrived, not when revisiting a case.
+  const fresh = Boolean(turn.completedAt ? Date.now() - new Date(turn.completedAt).getTime() < 15_000 : turn.status === "running");
+  let i = 0;
+  const step = () => (fresh ? { className: "reveal", style: { "--i": i++ } as React.CSSProperties } : {});
+
   return (
-    <article className="rise-in overflow-hidden rounded-2xl border bg-card shadow-xs/5">
-      <header className="border-b px-5 pt-5 pb-4">
-        <div className="flex items-center gap-2 text-muted-foreground text-xs">
-          <ModeIcon className={cn("size-3.5", mode.tint)} />
-          <span>Second opinion · {mode.label}</span>
-          {brief.version > 1 && <span>· v{brief.version}</span>}
+    <article className="overflow-hidden rounded-3xl border bg-card shadow-[var(--shadow-raised)]">
+      <header className="px-6 pt-6 pb-5 sm:px-8 sm:pt-8">
+        <div {...step()}>
+          <div className="flex items-center gap-2 text-muted-foreground text-xs">
+            <ModeIcon className={cn("size-3.5", mode.tint)} />
+            <span>{mode.label} second opinion</span>
+            {brief.version > 1 && <span className="text-faint">(revision {brief.version})</span>}
+          </div>
+          <h2 className="mt-3 font-serif text-[1.75rem] leading-[1.15] tracking-[-0.015em] sm:text-[2rem]" style={{ fontVariationSettings: '"opsz" 36' }}>
+            {brief.verdict || "Assessment"}
+          </h2>
+          {brief.bottomLine && <p className="mt-3 max-w-[62ch] font-serif text-[1.0625rem] text-foreground/80 leading-relaxed">{brief.bottomLine}</p>}
         </div>
-        <div className="mt-2 flex flex-wrap items-start justify-between gap-x-6 gap-y-3">
-          <h2 className="min-w-0 flex-1 font-semibold text-xl leading-snug tracking-tight">{brief.verdict || "Assessment"}</h2>
-          <ConfidenceMeter value={brief.confidence} />
+        <div {...step()} className={cn("mt-5 flex flex-wrap items-center gap-x-6 gap-y-3", fresh && "reveal")}>
+          <ConfidenceMeter value={brief.confidence} animate={fresh} />
+          <CouncilStack members={turn.council.members} />
         </div>
-        {brief.bottomLine && <p className="mt-2 text-[0.9375rem] text-foreground/90 leading-relaxed">{brief.bottomLine}</p>}
       </header>
 
-      <div className="flex flex-col gap-6 px-5 py-5">
+      <div className="flex flex-col gap-7 border-t px-6 py-6 sm:px-8">
         {brief.redFlags.length > 0 && (
-          <div className="rounded-xl border border-error/30 bg-error-surface p-3.5">
-            <p className="flex items-center gap-1.5 font-semibold text-error-foreground text-xs uppercase tracking-[0.06em]">
-              <AlertOctagon className="size-3.5" /> Red flags
-            </p>
-            <ul className="mt-2 space-y-1.5 text-sm">
-              {brief.redFlags.map((f, i) => (
-                <li key={i} className="flex gap-2">
-                  <span className="mt-2 size-1 shrink-0 rounded-full bg-error" />
-                  {f}
-                </li>
-              ))}
-            </ul>
+          <div {...step()}>
+            <div className="rounded-2xl bg-error-surface px-4 py-3.5">
+              <SectionTitle icon={<AlertTriangle className="!text-error" />} className="text-error-foreground">
+                Needs attention now
+              </SectionTitle>
+              <ul className="mt-2 space-y-1.5 text-[0.9375rem]">
+                {brief.redFlags.map((f, k) => (
+                  <li key={k} className="flex gap-2.5">
+                    <span className="mt-2.5 size-1 shrink-0 rounded-full bg-error" />
+                    {f}
+                  </li>
+                ))}
+              </ul>
+            </div>
           </div>
         )}
 
         {brief.sections.map((section) => (
-          <Section key={section.title} title={section.title} items={section.items} />
+          <div key={section.title} {...step()}>
+            <SectionTitle>{section.title}</SectionTitle>
+            <ul className="mt-2 divide-y">
+              {section.items.map((item, k) => (
+                <li key={k} className="flex gap-4 py-2.5">
+                  <div className="min-w-0 flex-1">
+                    <p className="font-medium text-[0.9375rem]">{item.text}</p>
+                    {item.detail && <p className="mt-0.5 text-muted-foreground text-sm leading-relaxed">{item.detail}</p>}
+                  </div>
+                  {item.level && <Level level={item.level} word={LEVEL_WORD[levelKind(section.title)][item.level]} />}
+                </li>
+              ))}
+            </ul>
+          </div>
         ))}
 
         {brief.nextSteps.length > 0 && (
-          <div>
-            <Eyebrow>Next steps</Eyebrow>
-            <ol className="mt-2 flex flex-col gap-2">
-              {brief.nextSteps.map((s, i) => (
-                <StepRow key={i} index={i + 1} step={s} />
+          <div {...step()}>
+            <SectionTitle>Next steps</SectionTitle>
+            <ol className="mt-2 divide-y">
+              {brief.nextSteps.map((s, k) => (
+                <li key={k} className="flex gap-3.5 py-2.5">
+                  <span className="mt-0.5 flex size-5 shrink-0 items-center justify-center rounded-full border font-medium text-2xs text-muted-foreground tabular-nums">{k + 1}</span>
+                  <div className="min-w-0 flex-1">
+                    <p className="font-medium text-[0.9375rem]">{s.action}</p>
+                    {s.why && <p className="mt-0.5 text-muted-foreground text-sm">{s.why}</p>}
+                  </div>
+                  {s.urgency === "now" && <Badge tone="error" className="self-start">Now</Badge>}
+                  {s.urgency === "later" && <span className="self-start pt-0.5 text-2xs text-faint">Later</span>}
+                </li>
               ))}
             </ol>
           </div>
         )}
 
         {(brief.consensus.length > 0 || brief.disagreements.length > 0) && (
-          <div className="grid gap-4 sm:grid-cols-2">
+          <div {...step()} className={cn("grid gap-6 sm:grid-cols-2", fresh && "reveal")}>
             {brief.consensus.length > 0 && (
-              <div className="rounded-xl border bg-muted/50 p-3.5">
-                <p className="flex items-center gap-1.5 font-medium text-sm">
-                  <Handshake className="size-4 text-success" /> Where the council agreed
-                </p>
-                <ul className="mt-2 space-y-1.5 text-muted-foreground text-sm">
-                  {brief.consensus.map((c, i) => (
-                    <li key={i}>{c}</li>
+              <div>
+                <SectionTitle>Where the council agreed</SectionTitle>
+                <ul className="mt-2 space-y-2 text-muted-foreground text-sm">
+                  {brief.consensus.map((c, k) => (
+                    <li key={k} className="flex gap-2">
+                      <Check className="mt-0.5 size-3.5 shrink-0 text-success" />
+                      {c}
+                    </li>
                   ))}
                 </ul>
               </div>
             )}
             {brief.disagreements.length > 0 && (
-              <div className="rounded-xl border bg-muted/50 p-3.5">
-                <p className="flex items-center gap-1.5 font-medium text-sm">
-                  <GitCompareArrows className="size-4 text-warning" /> Where it disagreed
-                </p>
-                <ul className="mt-2 space-y-3 text-sm">
-                  {brief.disagreements.map((d, i) => (
-                    <li key={i}>
-                      <p>{d.point}</p>
-                      <ul className="mt-1 space-y-1 border-l-2 pl-3 text-muted-foreground text-xs">
+              <div>
+                <SectionTitle>Where it disagreed</SectionTitle>
+                <ul className="mt-2 space-y-4 text-sm">
+                  {brief.disagreements.map((d, k) => (
+                    <li key={k}>
+                      <p className="font-medium">{d.point}</p>
+                      <ul className="mt-1.5 space-y-1.5">
                         {d.positions.map((p, j) => (
-                          <li key={j}>{p}</li>
+                          <Position key={j} text={p} members={[...turn.council.members, turn.council.chairman]} />
                         ))}
                       </ul>
                     </li>
@@ -94,12 +144,12 @@ export function BriefCard({ conversationId, turn, brief, hermesConfigured }: { c
         )}
 
         {brief.openQuestions.length > 0 && (
-          <div>
-            <Eyebrow>Would change the opinion</Eyebrow>
-            <ul className="mt-2 space-y-1.5 text-sm">
-              {brief.openQuestions.map((q, i) => (
-                <li key={i} className="flex gap-2 text-muted-foreground">
-                  <CircleHelp className="mt-0.5 size-3.5 shrink-0" />
+          <div {...step()}>
+            <SectionTitle>What would change this opinion</SectionTitle>
+            <ul className="mt-2 grid gap-x-6 gap-y-1.5 text-muted-foreground text-sm sm:grid-cols-2">
+              {brief.openQuestions.map((q, k) => (
+                <li key={k} className="flex gap-2">
+                  <span className="mt-2 size-1 shrink-0 rounded-full bg-faint" />
                   {q}
                 </li>
               ))}
@@ -108,9 +158,10 @@ export function BriefCard({ conversationId, turn, brief, hermesConfigured }: { c
         )}
       </div>
 
-      <footer className="flex flex-wrap items-center gap-2 border-t bg-muted/40 px-5 py-3">
+      <footer className="flex flex-wrap items-center gap-3 border-t bg-muted/60 px-6 py-3.5 sm:px-8">
         {brief.caveats.length > 0 && <p className="mr-auto max-w-md text-2xs text-muted-foreground leading-snug">{brief.caveats.join(" ")}</p>}
-        <div className="ml-auto flex items-center gap-2">
+        <div className="ml-auto flex items-center gap-1.5">
+          <CopyBrief conversationId={conversationId} turnId={turn.id} />
           <a className={buttonVariants({ variant: "outline", size: "sm" })} href={api.briefUrl(conversationId, turn.id)} download>
             <Download /> Export
           </a>
@@ -121,74 +172,85 @@ export function BriefCard({ conversationId, turn, brief, hermesConfigured }: { c
   );
 }
 
-function Section({ title, items }: { title: string; items: BriefItem[] }) {
-  const ranked = items.some((i) => i.level);
+/** Puts the member's mark next to a disagreement position that names them. */
+function Position({ text, members }: { text: string; members: CouncilMember[] }) {
+  const member = members.find((m) => text.toLowerCase().startsWith(m.label.toLowerCase()) || text.toLowerCase().includes(m.label.toLowerCase()));
   return (
-    <div>
-      <Eyebrow>{title}</Eyebrow>
-      <ul className="mt-2 divide-y rounded-xl border">
-        {items.map((item, i) => (
-          <li key={i} className="flex gap-3 px-3.5 py-2.5">
-            {ranked && <LevelBar level={item.level} />}
-            <div className="min-w-0 flex-1">
-              <p className="font-medium text-sm">{item.text}</p>
-              {item.detail && <p className="mt-0.5 text-muted-foreground text-sm leading-relaxed">{item.detail}</p>}
-            </div>
-            {item.level && (
-              <Badge tone={item.level === "high" ? "error" : item.level === "medium" ? "warning" : "neutral"} className="self-start capitalize">
-                {item.level}
-              </Badge>
-            )}
-          </li>
-        ))}
-      </ul>
-    </div>
-  );
-}
-
-function LevelBar({ level }: { level?: BriefItem["level"] }) {
-  const filled = level === "high" ? 3 : level === "medium" ? 2 : level === "low" ? 1 : 0;
-  const color = level === "high" ? "bg-error" : level === "medium" ? "bg-warning" : "bg-muted-foreground/60";
-  return (
-    <div className="mt-1 flex h-3.5 shrink-0 items-end gap-0.5" aria-hidden>
-      {[1, 2, 3].map((n) => (
-        <span key={n} className={cn("w-1 rounded-sm", n <= filled ? color : "bg-border")} style={{ height: `${4 + n * 3}px` }} />
-      ))}
-    </div>
-  );
-}
-
-function StepRow({ index, step }: { index: number; step: NextStep }) {
-  const tone = step.urgency === "now" ? "error" : step.urgency === "soon" ? "warning" : "neutral";
-  return (
-    <li className="flex gap-3 rounded-xl border px-3.5 py-2.5">
-      <span className="flex size-5 shrink-0 items-center justify-center rounded-full bg-primary/10 font-semibold text-2xs text-primary">{index}</span>
-      <div className="min-w-0 flex-1">
-        <p className="font-medium text-sm">{step.action}</p>
-        {step.why && <p className="mt-0.5 text-muted-foreground text-sm">{step.why}</p>}
-      </div>
-      <Badge tone={tone} className="self-start capitalize">
-        {step.urgency}
-      </Badge>
+    <li className="flex gap-2 text-muted-foreground">
+      {member ? <ModelLogo member={member} className="mt-0.5 size-3.5" /> : <span className="mt-2 size-1 shrink-0 rounded-full bg-faint" />}
+      <span className="min-w-0">{text}</span>
     </li>
   );
 }
 
-function ConfidenceMeter({ value }: { value: number }) {
-  const pct = Math.round(value * 100);
-  const label = pct >= 75 ? "High" : pct >= 50 ? "Moderate" : "Low";
+function Level({ level, word }: { level: NonNullable<BriefItem["level"]>; word: string }) {
+  const filled = level === "high" ? 3 : level === "medium" ? 2 : 1;
+  const color = level === "high" ? "bg-foreground" : level === "medium" ? "bg-foreground/55" : "bg-foreground/30";
   return (
-    <div className="w-36 shrink-0" title="The council's own estimate of its confidence">
-      <div className="flex items-baseline justify-between text-xs">
-        <span className="text-muted-foreground">Confidence</span>
-        <span className="font-medium tabular-nums">
-          {label} · {pct}%
-        </span>
+    <span className="flex shrink-0 items-center gap-2 self-start pt-1 text-2xs text-muted-foreground" title={word}>
+      <span className="hidden sm:inline">{word}</span>
+      <span className="flex items-end gap-[3px]" aria-hidden>
+        {[1, 2, 3].map((n) => (
+          <span key={n} className={cn("w-[3px] rounded-full", n <= filled ? color : "bg-border-strong")} style={{ height: `${4 + n * 3}px` }} />
+        ))}
+      </span>
+    </span>
+  );
+}
+
+function ConfidenceMeter({ value, animate }: { value: number; animate: boolean }) {
+  const pct = Math.round(value * 100);
+  const label = pct >= 75 ? "High confidence" : pct >= 50 ? "Moderate confidence" : "Low confidence";
+  const [shown, setShown] = useState(animate ? 0 : pct);
+  // Fill once, after the verdict has settled.
+  useEffect(() => {
+    if (!animate) return setShown(pct);
+    const t = setTimeout(() => setShown(pct), 160);
+    return () => clearTimeout(t);
+  }, [animate, pct]);
+  return (
+    <div className="flex items-center gap-3" title="The council's own estimate">
+      <div className="h-1.5 w-28 overflow-hidden rounded-full bg-border">
+        <div className="h-full rounded-full bg-foreground transition-[width] duration-[900ms] ease-[var(--ease-out)]" style={{ width: `${shown}%` }} />
       </div>
-      <div className="mt-1.5 h-1.5 overflow-hidden rounded-full bg-border">
-        <div className={cn("h-full rounded-full transition-[width] duration-700", pct >= 75 ? "bg-success" : pct >= 50 ? "bg-primary" : "bg-warning")} style={{ width: `${pct}%` }} />
-      </div>
+      <span className="text-muted-foreground text-xs tabular-nums">
+        {label}, {pct}%
+      </span>
     </div>
+  );
+}
+
+function CouncilStack({ members }: { members: CouncilMember[] }) {
+  return (
+    <div className="flex items-center gap-2 text-muted-foreground text-xs">
+      <span className="flex -space-x-1.5">
+        {members.map((m) => (
+          <span key={m.id} className="flex size-6 items-center justify-center rounded-full border bg-background ring-2 ring-card" title={m.label}>
+            <ModelLogo member={m} className="size-3.5" />
+          </span>
+        ))}
+      </span>
+      Weighed by {members.length} models
+    </div>
+  );
+}
+
+function CopyBrief({ conversationId, turnId }: { conversationId: string; turnId: string }) {
+  const [copied, setCopied] = useState(false);
+  return (
+    <Button
+      variant="ghost-muted"
+      size="sm"
+      onClick={async () => {
+        const text = await fetch(api.briefUrl(conversationId, turnId)).then((r) => r.text());
+        await navigator.clipboard.writeText(text);
+        setCopied(true);
+        setTimeout(() => setCopied(false), 1600);
+      }}
+    >
+      {copied ? <Check className="text-success" /> : <Copy />}
+      {copied ? "Copied" : "Copy"}
+    </Button>
   );
 }
 
@@ -199,13 +261,13 @@ function Handoff({ conversationId, turn, configured }: { conversationId: string;
     return <Badge tone={turn.handoff.ok ? "success" : "error"}>{turn.handoff.ok ? (turn.handoff.simulated ? "Hand-off simulated" : "Sent to agent") : `Hand-off failed: ${turn.handoff.error}`}</Badge>;
   if (!confirming)
     return (
-      <Button size="sm" variant="outline" onClick={() => setConfirming(true)}>
+      <Button size="sm" onClick={() => setConfirming(true)}>
         <Send /> Send to agent{configured ? "" : " (simulated)"}
       </Button>
     );
   return (
     <span className="flex items-center gap-2 text-xs">
-      Authorize your agent to act on this?
+      Let your agent act on this?
       <Button
         size="sm"
         disabled={sending}

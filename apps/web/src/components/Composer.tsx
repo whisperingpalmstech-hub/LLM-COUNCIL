@@ -18,7 +18,7 @@ export function Composer({
   busy,
   files,
   voice,
-  phoneUrl,
+  phoneLink,
   autoFocus,
   footer,
   value,
@@ -34,7 +34,8 @@ export function Composer({
   busy?: boolean;
   files: ComposerFile[];
   voice: boolean;
-  phoneUrl?: string | null;
+  /** Returns a signed link a phone can use to add files to this case. */
+  phoneLink?: () => Promise<string>;
   autoFocus?: boolean;
   footer?: ReactNode;
   value: string;
@@ -89,8 +90,8 @@ export function Composer({
     <div className="w-full">
       <div
         className={cn(
-          "relative rounded-2xl border bg-card shadow-xs/5 transition-[border-color,box-shadow] focus-within:border-ring/60 focus-within:ring-3 focus-within:ring-ring/10 dark:shadow-[0_14px_32px_-18px_rgb(0_0_0/75%)]",
-          dragging && "border-primary ring-3 ring-primary/20"
+          "relative rounded-3xl border border-border-strong bg-card shadow-[var(--shadow-raised)] transition-[border-color,box-shadow] duration-200 ease-out focus-within:border-ring/50 focus-within:shadow-[var(--shadow-raised),0_0_0_4px_color-mix(in_srgb,var(--ring)_12%,transparent)]",
+          dragging && "border-ring shadow-[0_0_0_4px_color-mix(in_srgb,var(--ring)_18%,transparent)]"
         )}
         onDragOver={(e) => {
           e.preventDefault();
@@ -106,7 +107,7 @@ export function Composer({
         {files.length > 0 && (
           <div className="flex flex-wrap gap-1.5 px-3 pt-3">
             {files.map((f) => (
-              <span key={f.id} className="inline-flex max-w-56 items-center gap-1.5 rounded-lg border bg-muted py-1 pr-1.5 pl-2 text-xs" title={f.readable === false ? "The council can't read this file's contents as text" : undefined}>
+              <span key={f.id} className="fade-in inline-flex max-w-56 items-center gap-1.5 rounded-full bg-muted py-1 pr-1.5 pl-2.5 text-xs" title={f.readable === false ? "The council can't read this file's contents as text" : undefined}>
                 <FileText className="size-3.5 shrink-0 text-muted-foreground" />
                 <span className="truncate">{f.name}</span>
                 {onRemoveFile && (
@@ -138,25 +139,25 @@ export function Composer({
             }
           }}
           className={cn(
-            "block w-full resize-none bg-transparent px-4 pt-3.5 text-[0.9375rem] leading-relaxed outline-none placeholder:text-muted-foreground/70 disabled:cursor-not-allowed",
+            "block w-full resize-none bg-transparent px-5 pt-4 text-[0.9375rem] leading-relaxed outline-none placeholder:text-faint disabled:cursor-not-allowed",
             size === "hero" ? "min-h-28" : "min-h-14"
           )}
         />
-        <div className="flex items-center gap-1 px-2 pt-1 pb-2">
+        <div className="flex items-center gap-0.5 px-2.5 pt-1 pb-2.5">
           <input ref={fileInput} type="file" multiple hidden onChange={(e) => attach(e.target.files)} />
           <Button variant="ghost-muted" size="icon-sm" onClick={() => fileInput.current?.click()} title="Attach files (or drop / paste)" aria-label="Attach files">
             <Paperclip />
           </Button>
           {voice && <VoiceButton onText={(t) => onValueChange(value ? `${value.trimEnd()} ${t}` : t)} onError={setError} />}
-          {phoneUrl && <PhoneButton url={phoneUrl} />}
+          {phoneLink && <PhoneButton getUrl={phoneLink} />}
           <div className="ml-auto flex items-center gap-2">
             {footer}
             {busy && onStop ? (
-              <Button variant="outline" size="icon-sm" onClick={onStop} title="Stop the council" aria-label="Stop">
+              <Button variant="outline" size="icon" className="rounded-full" onClick={onStop} title="Stop the council" aria-label="Stop">
                 <Square className="size-3 fill-current" />
               </Button>
             ) : (
-              <Button size="icon-sm" className="rounded-full" disabled={!canSend} onClick={send} aria-label="Send" title="Send (Enter)">
+              <Button size="icon" className="rounded-full" disabled={!canSend} onClick={send} aria-label="Send" title="Send (Enter)">
                 <ArrowUp />
               </Button>
             )}
@@ -220,18 +221,18 @@ function VoiceButton({ onText, onError }: { onText: (text: string) => void; onEr
   );
 }
 
-function PhoneButton({ url }: { url: string }) {
+function PhoneButton({ getUrl }: { getUrl: () => Promise<string> }) {
   const [qr, setQr] = useState<string | null>(null);
   return (
-    <Popover.Root onOpenChange={(open) => open && !qr && QRCode.toDataURL(url, { margin: 1, width: 200 }).then(setQr)}>
+    <Popover.Root onOpenChange={(open) => open && !qr && getUrl().then((url) => QRCode.toDataURL(url, { margin: 1, width: 200 })).then(setQr, () => undefined)}>
       <Popover.Trigger render={<Button variant="ghost-muted" size="icon-sm" title="Add files from your phone" aria-label="Add files from your phone" />}>
         <Smartphone />
       </Popover.Trigger>
       <Popover.Portal>
         <Popover.Positioner side="top" align="start" sideOffset={8} className="z-50">
-          <Popover.Popup className="w-64 rounded-xl border bg-popover p-4 shadow-xl transition-[opacity,scale] duration-150 data-ending-style:scale-95 data-ending-style:opacity-0 data-starting-style:scale-95 data-starting-style:opacity-0">
+          <Popover.Popup className="w-64 origin-[var(--transform-origin)] rounded-2xl border bg-popover p-4 shadow-[0_16px_40px_-12px_rgb(0_0_0/0.25)] transition-[opacity,scale] duration-200 ease-[var(--ease-out)] data-ending-style:scale-[0.97] data-ending-style:opacity-0 data-ending-style:duration-150 data-starting-style:scale-[0.96] data-starting-style:opacity-0">
             <p className="font-medium text-sm">Add from your phone</p>
-            <p className="mt-0.5 text-muted-foreground text-xs">Scan to send photos, scans, or notes into this case.</p>
+            <p className="mt-0.5 text-muted-foreground text-xs">Scan to send photos, scans, or notes into this case. The link works for 12 hours.</p>
             <div className="mt-3 flex justify-center rounded-lg bg-white p-2">{qr ? <img src={qr} alt="QR code" width={200} height={200} /> : <div className="size-[200px]" />}</div>
           </Popover.Popup>
         </Popover.Positioner>

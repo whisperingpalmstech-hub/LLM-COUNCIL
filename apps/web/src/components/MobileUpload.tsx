@@ -6,6 +6,7 @@ import { Button } from "./ui/button";
 
 /** Phone page reached via the QR code: add photos, scans, files, or a note to a case. */
 export function MobileUpload({ conversationId }: { conversationId: string }) {
+  const token = new URLSearchParams(location.search).get("token") ?? undefined;
   const [log, setLog] = useState<{ ok: boolean; text: string }[]>([]);
   const [note, setNote] = useState("");
   const [busy, setBusy] = useState(false);
@@ -15,7 +16,7 @@ export function MobileUpload({ conversationId }: { conversationId: string }) {
     setBusy(true);
     for (const file of Array.from(files ?? [])) {
       try {
-        await api.upload(conversationId, { name: file.name, mimeType: file.type, data: await fileToBase64(file), source: "mobile" });
+        await api.upload(conversationId, { name: file.name, mimeType: file.type, data: await fileToBase64(file), source: "mobile" }, token);
         add(true, file.name);
       } catch (e) {
         add(false, `${file.name}: ${(e as Error).message}`);
@@ -28,7 +29,7 @@ export function MobileUpload({ conversationId }: { conversationId: string }) {
     setBusy(true);
     try {
       const data = btoa(String.fromCharCode(...new TextEncoder().encode(note)));
-      await api.upload(conversationId, { name: `note-${new Date().toTimeString().slice(0, 8)}.txt`, mimeType: "text/plain", data, source: "mobile" });
+      await api.upload(conversationId, { name: `note-${new Date().toTimeString().slice(0, 8)}.txt`, mimeType: "text/plain", data, source: "mobile" }, token);
       add(true, "Note");
       setNote("");
     } catch (e) {

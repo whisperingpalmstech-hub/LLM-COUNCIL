@@ -1,6 +1,24 @@
 // REST request/response shapes. Commands go over REST; state changes come back as events over the WebSocket.
 
-import type { Attachment, CaseMode, CouncilConfig } from "./model.ts";
+import type { Attachment, AuthUser, CaseMode, CouncilConfig, SignupMode } from "./model.ts";
+
+export interface AuthConfigResponse {
+  signup: SignupMode;
+}
+
+export interface MeResponse {
+  user: AuthUser;
+}
+
+export interface LoginRequest {
+  email: string;
+  password: string;
+}
+
+export interface SignupRequest extends LoginRequest {
+  name: string;
+  inviteCode?: string;
+}
 
 export interface CreateConversationRequest {
   title?: string;

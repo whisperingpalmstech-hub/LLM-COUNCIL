@@ -52,10 +52,18 @@ Adding a provider means one class plus one line in `ProviderRegistry.fromConfig`
 
 ## Persistence
 
-SQLite via `node:sqlite`, in one file (`data/synod.sqlite`) with two tables:
+SQLite via `node:sqlite`, in one file (`data/synod.sqlite`):
 
 * `events(seq, conversation_id, type, at, payload)`: append-only.
-* `settings(key, value)`: the saved council configuration.
+* `settings(key, value)`: the saved council configuration and the upload-link signing secret.
+* `users` and `sessions`: accounts (scrypt password hashes) and sign-in sessions (only a SHA-256 of each token is stored).
+
+## Accounts and privacy
+
+* Sign-in sets an HttpOnly, SameSite=Lax session cookie (Secure over HTTPS). Sign-in attempts are rate-limited.
+* Every case records its owner in `conversation.created`. The REST API returns 404 for other people's cases, `/uploads` only serves a file to the owner of its case, and the WebSocket only pushes events and drafts for cases the connected user owns.
+* The first account is the administrator (the only role that can change the council). After that, sign-up needs `SYNOD_INVITE_CODE`, is closed, or is open with `SYNOD_SIGNUP=open`.
+* The phone QR code carries an HMAC-signed, 12-hour token bound to one case, so a phone can add files without signing in.
 
 Uploads go in `data/uploads/` and are served with `Content-Security-Policy: sandbox`. Voice audio is written to the OS temp directory and deleted right after transcription.
 

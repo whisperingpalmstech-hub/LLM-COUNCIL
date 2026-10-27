@@ -19,7 +19,7 @@ import type {
 type E<T extends string, P> = { type: T; seq: number; conversationId: string; at: string } & P;
 
 export type ConversationEvent =
-  | E<"conversation.created", { title: string; mode: CaseMode }>
+  | E<"conversation.created", { title: string; mode: CaseMode; ownerId?: string }>
   | E<"conversation.mode_changed", { mode: CaseMode }>
   | E<"conversation.renamed", { title: string }>
   | E<"conversation.archived", { archived: boolean }>
@@ -76,6 +76,7 @@ export function applyEvent(state: Conversation, event: ConversationEvent): Conve
     case "conversation.created":
       next.title = event.title;
       next.mode = event.mode ?? "general"; // cases created before modes existed
+      if (event.ownerId) next.ownerId = event.ownerId;
       next.createdAt = event.at;
       break;
     case "conversation.mode_changed":

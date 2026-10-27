@@ -2,11 +2,11 @@ import fs from "node:fs";
 import path from "node:path";
 import { DatabaseSync } from "node:sqlite";
 
-const SCHEMA_VERSION = 1;
+const SCHEMA_VERSION = 2;
 
 /**
- * Two tables: an append-only event log (the source of truth for conversations)
- * and a small key/value settings table (council configuration).
+ * An append-only event log (the source of truth for conversations), a key/value
+ * settings table (council configuration), and users + sessions for sign-in.
  */
 export function openDatabase(location: string): DatabaseSync {
   if (location !== ":memory:") fs.mkdirSync(path.dirname(location), { recursive: true });
@@ -28,6 +28,25 @@ export function openDatabase(location: string): DatabaseSync {
         key   TEXT PRIMARY KEY,
         value TEXT NOT NULL
       );
+    `);
+  }
+  if (version < 2) {
+    db.exec(`
+      CREATE TABLE IF NOT EXISTS users (
+        id            TEXT PRIMARY KEY,
+        email         TEXT NOT NULL UNIQUE COLLATE NOCASE,
+        name          TEXT NOT NULL,
+        password_hash TEXT NOT NULL,
+        role          TEXT NOT NULL DEFAULT 'member',
+        created_at    TEXT NOT NULL
+      );
+      CREATE TABLE IF NOT EXISTS sessions (
+        token_hash TEXT PRIMARY KEY,
+        user_id    TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        created_at TEXT NOT NULL,
+        expires_at TEXT NOT NULL
+      );
+      CREATE INDEX IF NOT EXISTS sessions_user ON sessions(user_id);
     `);
   }
   db.exec(`PRAGMA user_version = ${SCHEMA_VERSION}`);

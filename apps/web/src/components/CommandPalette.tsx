@@ -14,7 +14,7 @@ interface Item {
   run: () => void;
 }
 
-export function CommandPalette({ open, onOpenChange, onSettings }: { open: boolean; onOpenChange: (open: boolean) => void; onSettings: () => void }) {
+export function CommandPalette({ open, onOpenChange, onSettings }: { open: boolean; onOpenChange: (open: boolean) => void; onSettings?: () => void }) {
   const summaries = useSummaries();
   const [query, setQuery] = useState("");
   const [index, setIndex] = useState(0);
@@ -29,8 +29,8 @@ export function CommandPalette({ open, onOpenChange, onSettings }: { open: boole
   const items = useMemo<Item[]>(() => {
     const q = query.trim().toLowerCase();
     const actions: Item[] = [
-      { id: "new", icon: <PenSquare />, label: "New case", run: () => navigate("/") },
-      { id: "settings", icon: <Settings2 />, label: "Council settings", run: onSettings }
+      { id: "new", icon: <PenSquare />, label: "New case", run: () => navigate("/new") },
+      ...(onSettings ? [{ id: "settings", icon: <Settings2 />, label: "Council settings", run: onSettings }] : [])
     ];
     const cases: Item[] = summaries.map((s) => {
       const Icon = MODE_UI[s.mode ?? "general"].icon;
@@ -48,8 +48,8 @@ export function CommandPalette({ open, onOpenChange, onSettings }: { open: boole
   return (
     <D.Root open={open} onOpenChange={onOpenChange}>
       <D.Portal>
-        <D.Backdrop className="fixed inset-0 z-50 bg-black/40 transition-opacity duration-150 data-ending-style:opacity-0 data-starting-style:opacity-0" />
-        <D.Popup className="fixed top-[14vh] left-1/2 z-50 w-[min(560px,calc(100vw-2rem))] -translate-x-1/2 overflow-hidden rounded-2xl border bg-popover shadow-2xl outline-none transition-[scale,opacity] duration-150 data-ending-style:scale-98 data-ending-style:opacity-0 data-starting-style:scale-98 data-starting-style:opacity-0">
+        <D.Backdrop className="fixed inset-0 z-50 bg-black/30 dark:bg-black/60" />
+        <D.Popup className="fixed top-[14vh] left-1/2 z-50 w-[min(560px,calc(100vw-2rem))] -translate-x-1/2 overflow-hidden rounded-2xl border bg-popover shadow-[0_24px_64px_-12px_rgb(0_0_0/0.3)] outline-none">
           <D.Title className="sr-only">Search</D.Title>
           <div className="flex items-center gap-2 border-b px-4">
             <Search className="size-4 text-muted-foreground" />

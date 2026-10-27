@@ -165,8 +165,20 @@ export interface Turn {
   completedAt?: string;
 }
 
+export interface AuthUser {
+  id: string;
+  email: string;
+  name: string;
+  role: "admin" | "member";
+}
+
+/** How new accounts can be created on this server. */
+export type SignupMode = "first-user" | "invite" | "open" | "closed";
+
 export interface Conversation {
   id: string;
+  /** Owning user. Absent on cases created before accounts existed (visible to admins). */
+  ownerId?: string;
   title: string;
   mode: CaseMode;
   archived: boolean;

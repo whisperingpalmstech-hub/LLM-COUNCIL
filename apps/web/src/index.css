@@ -1,40 +1,49 @@
-/* Design tokens and the live-shine animation are adapted from T3 Code
-   (https://github.com/pingdotgg/t3code, MIT License, Copyright (c) 2026 T3 Tools Inc.). */
+/* Surface hierarchy and the live-shine animation are adapted from T3 Code
+   (https://github.com/pingdotgg/t3code, MIT License, Copyright (c) 2026 T3 Tools Inc.).
+   Motion values follow Emil Kowalski's design-engineering guidance. */
 
 @import "tailwindcss";
 @import "@fontsource-variable/inter";
+@import "@fontsource-variable/newsreader/opsz.css";
 @import "katex/dist/katex.min.css";
 
 @custom-variant dark (&:is(.dark, .dark *));
 
 @theme {
-  --font-sans: -apple-system, BlinkMacSystemFont, "Inter Variable", "Segoe UI", system-ui, sans-serif;
-  --font-mono: ui-monospace, "SF Mono", "SFMono-Regular", Menlo, Consolas, "Liberation Mono", monospace;
+  --font-sans: "Inter Variable", -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+  /* The opinion's voice: a text serif, as in journals and legal briefs. Used only for the verdict. */
+  --font-serif: "Newsreader Variable", "Iowan Old Style", Georgia, serif;
+  --font-mono: ui-monospace, "SF Mono", "SFMono-Regular", Menlo, Consolas, monospace;
   --color-zinc-25: oklch(0.992 0 0);
+  --ease-out: cubic-bezier(0.23, 1, 0.32, 1);
+  --ease-in-out: cubic-bezier(0.77, 0, 0.175, 1);
+  --ease-drawer: cubic-bezier(0.32, 0.72, 0, 1);
 }
 
 @theme inline {
   --text-2xs: 0.6875rem;
-  --text-2xs--line-height: calc(1 / 0.6875);
+  --text-2xs--line-height: 1rem;
   --radius-sm: calc(var(--radius) - 4px);
   --radius-md: calc(var(--radius) - 2px);
   --radius-lg: var(--radius);
   --radius-xl: calc(var(--radius) + 4px);
   --radius-2xl: calc(var(--radius) + 8px);
-  --ease-drawer: cubic-bezier(0.32, 0.72, 0, 1);
+  --radius-3xl: calc(var(--radius) + 14px);
   --color-background: var(--background);
   --color-foreground: var(--foreground);
   --color-card: var(--card);
-  --color-card-foreground: var(--card-foreground);
   --color-popover: var(--popover);
   --color-primary: var(--primary);
   --color-primary-foreground: var(--primary-foreground);
+  --color-accent-brand: var(--accent-brand);
   --color-secondary: var(--secondary);
   --color-muted: var(--muted);
   --color-muted-foreground: var(--muted-foreground);
+  --color-faint: var(--faint);
   --color-accent: var(--accent);
   --color-message: var(--message-surface);
   --color-border: var(--border);
+  --color-border-strong: var(--border-strong);
   --color-input: var(--input);
   --color-ring: var(--ring);
   --color-error: var(--error);
@@ -45,7 +54,6 @@
   --color-warning: var(--warning);
   --color-warning-foreground: var(--warning-foreground);
   --color-warning-surface: var(--warning-surface);
-  --color-info: var(--info);
   --color-sidebar: var(--sidebar);
   --color-sidebar-row-hover: var(--sidebar-row-hover);
   --color-sidebar-row-selected: var(--sidebar-row-selected);
@@ -54,62 +62,70 @@
 
 :root {
   color-scheme: light;
-  --radius: 0.5rem;
-  --background: var(--color-zinc-25);
-  --foreground: var(--color-zinc-900);
+  --radius: 0.625rem;
+  --background: #fcfcfc;
+  --foreground: var(--color-zinc-950);
   --card: var(--color-white);
-  --card-foreground: var(--color-zinc-900);
   --popover: var(--color-white);
-  --primary: oklch(0.488 0.217 264);
+  /* Ink, not a brand hue: the primary action is the darkest thing on the page. */
+  --primary: var(--color-zinc-950);
   --primary-foreground: var(--color-white);
-  --secondary: var(--color-zinc-50);
-  --muted: var(--color-zinc-50);
+  --accent-brand: oklch(0.52 0.16 255);
+  --secondary: var(--color-zinc-100);
+  --muted: var(--color-zinc-100);
   --muted-foreground: var(--color-zinc-500);
-  --message-surface: color-mix(in srgb, var(--color-zinc-200) 55%, var(--color-zinc-100));
-  --accent: var(--color-zinc-100);
+  --faint: var(--color-zinc-400);
+  --message-surface: var(--color-zinc-100);
+  --accent: --alpha(var(--color-zinc-950) / 4.5%);
   --error: var(--color-red-500);
   --error-foreground: var(--color-red-700);
-  --error-surface: color-mix(in srgb, var(--error) 8%, transparent);
-  --border: var(--color-zinc-200);
-  --input: var(--color-zinc-300);
-  --ring: var(--primary);
-  --info: var(--color-blue-500);
+  --error-surface: color-mix(in srgb, var(--error) 7%, transparent);
+  --border: --alpha(var(--color-zinc-950) / 8%);
+  --border-strong: --alpha(var(--color-zinc-950) / 14%);
+  --input: --alpha(var(--color-zinc-950) / 12%);
+  --ring: var(--accent-brand);
   --success: var(--color-emerald-500);
   --success-foreground: var(--color-emerald-700);
   --warning: var(--color-amber-500);
   --warning-foreground: var(--color-amber-700);
-  --warning-surface: color-mix(in srgb, var(--warning) 8%, transparent);
+  --warning-surface: color-mix(in srgb, var(--warning) 9%, transparent);
   --sidebar: var(--color-zinc-50);
-  --sidebar-row-hover: var(--color-zinc-100);
+  --sidebar-row-hover: --alpha(var(--color-zinc-950) / 4%);
   --sidebar-row-selected: var(--color-white);
-  --code-background: color-mix(in srgb, var(--card) 90%, var(--background));
+  --code-background: var(--color-zinc-50);
   --shine-base: var(--muted-foreground);
   --shine-highlight: var(--foreground);
+  --shadow-raised: 0 1px 2px rgb(0 0 0 / 4%), 0 4px 12px -4px rgb(0 0 0 / 6%);
 
   @variant dark {
     color-scheme: dark;
     --background: #000;
     --foreground: var(--color-neutral-100);
-    --card: color-mix(in srgb, var(--color-neutral-950) 97%, var(--color-white));
-    --card-foreground: var(--color-neutral-100);
-    --popover: color-mix(in srgb, var(--color-neutral-950) 97%, var(--color-white));
-    --primary: oklch(0.571 0.21 264);
-    --secondary: --alpha(var(--color-white) / 3%);
-    --muted: --alpha(var(--color-white) / 3%);
+    --card: color-mix(in srgb, var(--color-neutral-950) 96%, var(--color-white));
+    --popover: color-mix(in srgb, var(--color-neutral-950) 94%, var(--color-white));
+    --primary: var(--color-neutral-50);
+    --primary-foreground: var(--color-neutral-950);
+    --accent-brand: oklch(0.7 0.14 255);
+    --secondary: --alpha(var(--color-white) / 5%);
+    --muted: --alpha(var(--color-white) / 4%);
     --muted-foreground: var(--color-neutral-400);
-    --accent: --alpha(var(--color-white) / 4%);
-    --message-surface: color-mix(in srgb, var(--color-neutral-950) 92%, var(--color-white));
+    --faint: var(--color-neutral-500);
+    --message-surface: color-mix(in srgb, var(--color-neutral-950) 90%, var(--color-white));
+    --accent: --alpha(var(--color-white) / 5%);
     --error: color-mix(in srgb, var(--color-red-500) 90%, var(--color-white));
     --error-foreground: var(--color-red-400);
-    --error-surface: color-mix(in srgb, var(--error) 16%, transparent);
+    --error-surface: color-mix(in srgb, var(--error) 12%, transparent);
     --border: --alpha(var(--color-white) / 8%);
-    --input: --alpha(var(--color-white) / 11%);
+    --border-strong: --alpha(var(--color-white) / 14%);
+    --input: --alpha(var(--color-white) / 12%);
     --success-foreground: var(--color-emerald-400);
     --warning-foreground: var(--color-amber-400);
-    --warning-surface: color-mix(in srgb, var(--warning) 16%, transparent);
-    --sidebar: var(--card);
-    --sidebar-row-hover: var(--accent);
-    --sidebar-row-selected: var(--muted);
+    --warning-surface: color-mix(in srgb, var(--warning) 12%, transparent);
+    --sidebar: color-mix(in srgb, var(--color-neutral-950) 70%, black);
+    --sidebar-row-hover: --alpha(var(--color-white) / 4%);
+    --sidebar-row-selected: --alpha(var(--color-white) / 7%);
+    --code-background: --alpha(var(--color-white) / 3%);
+    --shadow-raised: 0 0 0 1px rgb(255 255 255 / 3%), 0 12px 32px -16px rgb(0 0 0 / 80%);
   }
 }
 
@@ -124,14 +140,36 @@
   }
   body {
     @apply bg-background font-sans text-foreground antialiased;
-    font-feature-settings: "cv11", "ss01";
+    font-feature-settings: "cv11", "ss01", "ss03";
+    -webkit-tap-highlight-color: transparent;
+  }
+  button,
+  a {
+    touch-action: manipulation;
+  }
+  h1,
+  h2,
+  h3 {
+    text-wrap: balance;
+  }
+  p {
+    text-wrap: pretty;
   }
   ::selection {
-    background: color-mix(in srgb, var(--primary) 30%, transparent);
+    background: color-mix(in srgb, var(--accent-brand) 25%, transparent);
+  }
+  @media (pointer: fine) {
+    html {
+      overscroll-behavior: none;
+    }
+  }
+  .no-transitions,
+  .no-transitions * {
+    transition: none !important;
   }
 }
 
-/* A highlight sweeping across the label of whatever is running right now. */
+/* A highlight sweeping across whatever is running right now (T3 Code). */
 @keyframes live-shine {
   from {
     background-position: -4.5rem 0, 0 0;
@@ -153,26 +191,52 @@
   }
 }
 
-@keyframes rise-in {
+/* A council seat: a model's mark with a ring that shows what it's doing. */
+@keyframes seat-orbit {
+  to {
+    transform: rotate(1turn);
+  }
+}
+
+@utility seat-ring {
+  position: absolute;
+  inset: -3px;
+  border-radius: 9999px;
+  background: conic-gradient(from 0deg, transparent 0 55%, var(--accent-brand) 85%, transparent 100%);
+  mask: radial-gradient(farthest-side, transparent calc(100% - 2px), black calc(100% - 2px));
+  @media (prefers-reduced-motion: no-preference) {
+    animation: seat-orbit 1.1s linear infinite;
+  }
+}
+
+/* One orchestrated reveal for the brief; children stagger in once. */
+@keyframes reveal {
   from {
     opacity: 0;
     transform: translateY(6px);
   }
 }
 
-@utility rise-in {
+@utility reveal {
   @media (prefers-reduced-motion: no-preference) {
-    animation: rise-in 0.35s var(--ease-drawer) both;
+    animation: reveal 420ms var(--ease-out) both;
+    animation-delay: calc(var(--i, 0) * 45ms);
+  }
+}
+
+@utility fade-in {
+  @media (prefers-reduced-motion: no-preference) {
+    animation: reveal 260ms var(--ease-out) both;
   }
 }
 
 /* Long-form text (answers, the full opinion). */
 @utility prose-synod {
   font-size: 0.9375rem;
-  line-height: 1.7;
+  line-height: 1.72;
   overflow-wrap: anywhere;
   & > * + * {
-    margin-top: 0.85em;
+    margin-top: 0.9em;
   }
   & h1,
   & h2,
@@ -180,25 +244,25 @@
   & h4 {
     font-weight: 600;
     line-height: 1.3;
-    margin-top: 1.4em;
-    letter-spacing: -0.01em;
+    margin-top: 1.6em;
+    letter-spacing: -0.012em;
   }
   & h1 {
-    font-size: 1.25rem;
+    font-size: 1.2rem;
   }
   & h2 {
-    font-size: 1.1rem;
+    font-size: 1.075rem;
   }
   & h3,
   & h4 {
-    font-size: 1rem;
+    font-size: 0.975rem;
   }
   & > :first-child {
     margin-top: 0;
   }
   & ul,
   & ol {
-    padding-left: 1.3em;
+    padding-left: 1.25em;
   }
   & ul {
     list-style: disc;
@@ -207,30 +271,31 @@
     list-style: decimal;
   }
   & li + li {
-    margin-top: 0.3em;
+    margin-top: 0.35em;
   }
   & li::marker {
-    color: var(--muted-foreground);
+    color: var(--faint);
   }
   & a {
-    color: var(--primary);
+    color: var(--accent-brand);
     text-decoration: underline;
+    text-decoration-color: color-mix(in srgb, var(--accent-brand) 40%, transparent);
     text-underline-offset: 3px;
   }
   & strong {
     font-weight: 600;
   }
   & blockquote {
-    border-left: 2px solid var(--border);
+    border-left: 2px solid var(--border-strong);
     padding-left: 1em;
     color: var(--muted-foreground);
   }
   & :not(pre) > code {
     font-family: var(--font-mono);
-    font-size: 0.85em;
-    background: var(--accent);
+    font-size: 0.84em;
+    background: var(--muted);
     border-radius: 0.3rem;
-    padding: 0.1em 0.35em;
+    padding: 0.12em 0.35em;
   }
   & hr {
     border-color: var(--border);
@@ -239,11 +304,12 @@
     width: 100%;
     border-collapse: collapse;
     font-size: 0.875rem;
+    font-variant-numeric: tabular-nums;
   }
   & th,
   & td {
     border-bottom: 1px solid var(--border);
-    padding: 0.45em 0.6em;
+    padding: 0.5em 0.7em;
     text-align: left;
     vertical-align: top;
   }

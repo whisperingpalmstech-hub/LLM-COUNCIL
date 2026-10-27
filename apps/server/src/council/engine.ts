@@ -59,9 +59,9 @@ export class CouncilEngine {
 
   // ---- commands --------------------------------------------------------------
 
-  createConversation(title?: string, mode: CaseMode = "general"): string {
+  createConversation(title?: string, mode: CaseMode = "general", ownerId?: string): string {
     const conversationId = crypto.randomUUID();
-    this.deps.store.append({ type: "conversation.created", conversationId, title: cleanTitle(title) || "New conversation", mode: validMode(mode) });
+    this.deps.store.append({ type: "conversation.created", conversationId, title: cleanTitle(title) || "New conversation", mode: validMode(mode), ...(ownerId ? { ownerId } : {}) });
     return conversationId;
   }
 

@@ -47,11 +47,11 @@ OpenAI, Anthropic, Gemini, DeepSeek, OpenRouter, SiliconFlow, Ollama, RouteLLM a
 | Second-opinion brief, Markdown export | Council settings (on by default) |
 | Web search shared with the council | `TAVILY_API_KEY` or `PERPLEXITY_API_KEY`, then enable it in settings |
 | File attachments | 📎 button or paste. Text-like files are shared with the council (up to 20k characters each) |
-| Upload from phone | 📱 button shows a QR code. Set `SYNOD_ACCESS_PASSWORD` first, and `PUBLIC_BASE_URL` when off-LAN |
+| Upload from phone | 📱 button shows a QR code with a signed link to that case (valid 12 hours). Set `PUBLIC_BASE_URL` when off-LAN |
 | Voice input | `OPENROUTER_API_KEY` (cheap `google/gemini-2.5-flash-lite`, with fallbacks), or local whisper.cpp, or `OPENAI_API_KEY` |
 | Obsidian notes | `OBSIDIAN_VAULT_PATH`: every completed answer is written as a note |
 | Hermes hand-off | `HERMES_WEBHOOK_URL`. Simulated when unset, and always needs a confirm click |
-| Password protection | `SYNOD_ACCESS_PASSWORD` (HTTP Basic auth, covers the WebSocket too) |
+| Accounts | Email and password sign-in; each person's cases are private. `SYNOD_ADMIN_EMAIL` / `SYNOD_ADMIN_PASSWORD` create the admin on startup; testers join with `SYNOD_INVITE_CODE` |
 
 ## Commands
 
@@ -67,4 +67,4 @@ Requires Node.js 22.18 or newer. The server runs its TypeScript directly with No
 
 See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for how it fits together.
 
-The web UI borrows its design tokens and several patterns from [T3 Code](https://github.com/pingdotgg/t3code) (MIT License, © 2026 T3 Tools Inc.).
+Company logos are from [LobeHub Icons](https://github.com/lobehub/lobe-icons) (MIT). The web UI borrows its design tokens and several patterns from [T3 Code](https://github.com/pingdotgg/t3code) (MIT License, © 2026 T3 Tools Inc.).

@@ -89,7 +89,7 @@ export function CaseView({ id, info, onOpenSidebar }: { id: string; info: Server
               for (const f of files) await api.upload(id, { name: f.name, mimeType: f.type, data: await fileToBase64(f) });
             }}
             voice={Boolean(info?.voice.available)}
-            phoneUrl={`${info?.publicBaseUrl ?? location.origin}/mobile/${id}`}
+            phoneLink={() => api.uploadLink(id).then((r) => (r.url.startsWith("http") ? r.url : `${location.origin}${r.url}`))}
             onSend={async () => {
               await api.send(id, draft);
               setDraft("");

@@ -1,15 +1,19 @@
+import { createContext, useContext } from "react";
 import { Tabs } from "@base-ui/react/tabs";
 import { Crown, X } from "lucide-react";
 import type { Turn } from "@synod/contracts";
 import { useDraft } from "~/lib/store";
 import { cn, formatDuration } from "~/lib/utils";
 import { Markdown } from "../Markdown";
+import { ModelLogo } from "../ModelLogo";
 import { Button } from "../ui/button";
 import { Badge } from "../ui/misc";
 
 export type PanelTab = "opinions" | "reviews" | "agreement";
 
 /** Right-hand panel (after T3 Code's right panel): the evidence behind the brief. */
+const Seats = createContext<Turn["council"]["members"]>([]);
+
 export function CouncilPanel({
   turn,
   tab,
@@ -26,7 +30,7 @@ export function CouncilPanel({
   onClose: () => void;
 }) {
   return (
-    <>
+    <Seats.Provider value={[...turn.council.members, turn.council.chairman]}>
       <div className="fixed inset-0 z-30 bg-black/40 lg:hidden" onClick={onClose} />
       <aside className="fixed inset-y-0 right-0 z-40 flex w-[min(520px,100vw)] flex-col border-l bg-background shadow-2xl lg:static lg:w-[440px] lg:shadow-none xl:w-[520px]">
         <Tabs.Root value={tab} onValueChange={(v) => onTabChange(v as PanelTab)} className="flex min-h-0 flex-1 flex-col">
@@ -57,7 +61,7 @@ export function CouncilPanel({
           </Tabs.Panel>
         </Tabs.Root>
       </aside>
-    </>
+    </Seats.Provider>
   );
 }
 
@@ -70,13 +74,14 @@ function MemberPicker({ items, selected, onSelect }: { items: { id: string; labe
           type="button"
           onClick={() => onSelect(m.id)}
           className={cn(
-            "flex shrink-0 cursor-pointer items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs transition-colors",
-            m.id === selected ? "border-primary/40 bg-primary/10 text-foreground" : "text-muted-foreground hover:bg-accent hover:text-foreground",
+            "flex shrink-0 cursor-pointer items-center gap-1.5 rounded-full border py-1 pr-2.5 pl-1.5 text-xs transition-[background-color,color,scale] duration-150 ease-out active:scale-[0.97]",
+            m.id === selected ? "border-border-strong bg-card text-foreground shadow-[0_1px_2px_rgb(0_0_0/6%)]" : "border-transparent text-muted-foreground hover:bg-accent hover:text-foreground",
             m.failed && "text-error-foreground"
           )}
         >
+          <Mark id={m.id} />
           {m.label}
-          {m.badge && <span className="font-mono text-2xs opacity-70">{m.badge}</span>}
+          {m.badge && <span className="text-2xs text-faint tabular-nums">{m.badge}</span>}
         </button>
       ))}
     </div>
@@ -182,7 +187,10 @@ function Agreement({ turn }: { turn: Turn }) {
             return (
               <div key={a.memberId} className="flex items-center gap-3 text-sm">
                 <span className="w-4 text-right font-mono text-muted-foreground text-xs">{i + 1}</span>
-                <span className="w-36 truncate">{a.label}</span>
+                <span className="flex w-40 items-center gap-2 truncate">
+                  <Mark id={a.memberId} />
+                  {a.label}
+                </span>
                 <div className="h-2 flex-1 overflow-hidden rounded-full bg-border">
                   <div className={cn("h-full rounded-full", i === 0 ? "bg-primary" : "bg-primary/45")} style={{ width: `${Math.max(6, strength * 100)}%` }} />
                 </div>
@@ -203,8 +211,10 @@ function Agreement({ turn }: { turn: Turn }) {
               <tr>
                 <th />
                 {authors.map((a) => (
-                  <th key={a.memberId} className="max-w-20 px-1 pb-1 align-bottom font-medium text-muted-foreground">
-                    <span className="line-clamp-2">{a.label}</span>
+                  <th key={a.memberId} className="w-11 pb-1 align-bottom font-medium text-muted-foreground" title={a.label}>
+                    <span className="flex justify-center">
+                      <Mark id={a.memberId} />
+                    </span>
                   </th>
                 ))}
               </tr>
@@ -212,7 +222,12 @@ function Agreement({ turn }: { turn: Turn }) {
             <tbody>
               {reviews.map((r) => (
                 <tr key={r.memberId}>
-                  <th className="max-w-28 truncate pr-2 text-left font-medium text-muted-foreground">{memberLabel.get(r.memberId) ?? r.label}</th>
+                  <th className="max-w-32 pr-2 text-left font-medium text-muted-foreground">
+                    <span className="flex items-center gap-1.5 truncate">
+                      <Mark id={r.memberId} />
+                      {memberLabel.get(r.memberId) ?? r.label}
+                    </span>
+                  </th>
                   {authors.map((a) => {
                     const rank = rankGiven(r.ranking, a.memberId);
                     const self = a.memberId === r.memberId;
@@ -222,7 +237,7 @@ function Agreement({ turn }: { turn: Turn }) {
                         key={a.memberId}
                         title={rank ? `${memberLabel.get(r.memberId)} ranked ${a.label} #${rank}${self ? " (own answer)" : ""}` : "Not ranked"}
                         className={cn("size-11 rounded-md text-center font-semibold tabular-nums", self && "ring-2 ring-warning/70 ring-inset")}
-                        style={{ background: rank ? `color-mix(in oklch, var(--primary) ${Math.round(12 + intensity * 70)}%, transparent)` : "var(--muted)", color: intensity > 0.55 ? "white" : undefined }}
+                        style={{ background: rank ? `color-mix(in oklch, var(--accent-brand) ${Math.round(12 + intensity * 70)}%, transparent)` : "var(--muted)", color: intensity > 0.55 ? "white" : undefined }}
                       >
                         {rank ?? "–"}
                       </td>
@@ -247,4 +262,9 @@ function Agreement({ turn }: { turn: Turn }) {
 
 function Empty({ text }: { text: string }) {
   return <p className="px-6 py-16 text-center text-muted-foreground text-sm">{text}</p>;
+}
+
+function Mark({ id }: { id: string }) {
+  const member = useContext(Seats).find((m) => m.id === id);
+  return member ? <ModelLogo member={member} className="size-3.5" /> : null;
 }

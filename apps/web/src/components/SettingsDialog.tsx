@@ -5,7 +5,8 @@ import { api } from "~/lib/api";
 import { cn } from "~/lib/utils";
 import { Button } from "./ui/button";
 import { Dialog } from "./ui/dialog";
-import { Eyebrow } from "./ui/misc";
+import { ModelLogo } from "./ModelLogo";
+import { SectionTitle } from "./ui/misc";
 
 const PRESETS: { name: string; note: string; members: [string, string][]; chairman: string }[] = [
   {
@@ -56,13 +57,13 @@ export function SettingsDialog({ open, onOpenChange, info }: { open: boolean; on
         <div className="flex flex-col gap-6">
           {configured("openrouter") && (
             <div>
-              <Eyebrow>Presets</Eyebrow>
+              <SectionTitle>Presets</SectionTitle>
               <div className="mt-2 grid gap-2 sm:grid-cols-2">
                 {PRESETS.map((p) => (
                   <button
                     key={p.name}
                     type="button"
-                    className="cursor-pointer rounded-xl border p-3 text-left transition-colors hover:bg-accent"
+                    className="cursor-pointer rounded-2xl border p-3.5 text-left transition-[background-color,scale] duration-150 ease-out hover:bg-accent active:scale-[0.98]"
                     onClick={() =>
                       update({
                         members: p.members.map(([label, model]) => ({ id: model.replace(/[^\w.-]/g, "-"), label, provider: "openrouter", model })),
@@ -70,7 +71,14 @@ export function SettingsDialog({ open, onOpenChange, info }: { open: boolean; on
                       })
                     }
                   >
-                    <p className="font-medium text-sm">{p.name}</p>
+                    <span className="flex -space-x-1">
+                      {p.members.map(([label, model]) => (
+                        <span key={model} className="flex size-6 items-center justify-center rounded-full border bg-background ring-2 ring-popover">
+                          <ModelLogo member={{ label, model, provider: "openrouter" }} className="size-3.5" />
+                        </span>
+                      ))}
+                    </span>
+                    <p className="mt-2.5 font-medium text-sm">{p.name}</p>
                     <p className="text-muted-foreground text-xs">{p.note}</p>
                   </button>
                 ))}
@@ -79,7 +87,7 @@ export function SettingsDialog({ open, onOpenChange, info }: { open: boolean; on
           )}
 
           <div>
-            <Eyebrow>Members</Eyebrow>
+            <SectionTitle>Members</SectionTitle>
             <div className="mt-2 flex flex-col gap-1.5">
               {council.members.map((m, i) => (
                 <MemberRow
@@ -104,16 +112,15 @@ export function SettingsDialog({ open, onOpenChange, info }: { open: boolean; on
           </div>
 
           <div>
-            <Eyebrow className="flex items-center gap-1">
-              <Crown className="size-3 text-amber-500" /> Chairman
-            </Eyebrow>
+            <SectionTitle icon={<Crown className="!text-amber-500" />}>Chairman</SectionTitle>
+            <p className="mt-0.5 text-muted-foreground text-xs">Reads every opinion and review, then writes the verdict and the brief.</p>
             <div className="mt-2">
               <MemberRow member={council.chairman} configured={configured} onChange={(patch) => update({ chairman: { ...council.chairman, ...patch } })} />
             </div>
           </div>
 
           <div>
-            <Eyebrow>Behaviour</Eyebrow>
+            <SectionTitle>Behaviour</SectionTitle>
             <div className="mt-2 flex flex-col gap-2">
               <Toggle checked={council.clarify} onChange={(v) => update({ clarify: v })} label="Ask one intake question when key details are missing" />
               <Toggle checked={council.brief} onChange={(v) => update({ brief: v })} label="Produce a structured second-opinion brief" />
@@ -140,12 +147,15 @@ export function SettingsDialog({ open, onOpenChange, info }: { open: boolean; on
   );
 }
 
-const field = "h-8 min-w-0 rounded-lg border bg-transparent px-2.5 text-sm outline-none focus:border-ring/60 dark:bg-input/30";
+const field = "h-9 min-w-0 rounded-xl border border-border-strong bg-card px-3 text-sm outline-none transition-shadow focus:shadow-[0_0_0_4px_color-mix(in_srgb,var(--ring)_12%,transparent)]";
 
 function MemberRow({ member, configured, onChange, onRemove }: { member: CouncilMember; configured: (p: ProviderId) => boolean; onChange: (patch: Partial<CouncilMember>) => void; onRemove?: () => void }) {
   return (
     <div className="grid grid-cols-[1fr_auto] gap-1.5 sm:grid-cols-[minmax(0,1fr)_8.5rem_minmax(0,1.3fr)_auto]">
-      <input className={field} aria-label="Name" value={member.label} onChange={(e) => onChange({ label: e.target.value })} />
+      <div className="relative min-w-0">
+        <ModelLogo member={member} className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2" />
+        <input className={cn(field, "w-full pl-9")} aria-label="Name" value={member.label} onChange={(e) => onChange({ label: e.target.value })} />
+      </div>
       <select className={cn(field, "order-3 sm:order-none")} aria-label="Provider" value={member.provider} onChange={(e) => onChange({ provider: e.target.value as ProviderId })}>
         {PROVIDER_IDS.map((p) => (
           <option key={p} value={p}>

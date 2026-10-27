@@ -1,19 +1,28 @@
-import { Menu } from "lucide-react";
-import { useState } from "react";
-import { CASE_MODES, type CaseMode, type ServerInfo } from "@synod/contracts";
+import { Crown, Menu } from "lucide-react";
+import { useEffect, useState } from "react";
+import { CASE_MODES, type CaseMode, type CouncilConfig, type ServerInfo } from "@synod/contracts";
 import { api, fileToBase64 } from "~/lib/api";
+import { useAuth } from "~/lib/auth";
 import { MODE_UI } from "~/lib/modes";
 import { navigate } from "~/lib/router";
 import { cn } from "~/lib/utils";
 import { Composer } from "./Composer";
+import { ModelLogo } from "./ModelLogo";
 import { Button } from "./ui/button";
 
 export function NewCase({ info, onOpenSidebar }: { info: ServerInfo | null; onOpenSidebar: () => void }) {
+  const auth = useAuth();
   const [mode, setMode] = useState<CaseMode>(() => (localStorage.getItem("synod.mode") as CaseMode) || "medical");
   const [text, setText] = useState("");
   const [files, setFiles] = useState<File[]>([]);
   const [sending, setSending] = useState(false);
+  const [council, setCouncil] = useState<CouncilConfig | null>(null);
   const ui = MODE_UI[mode];
+  const firstName = auth.status === "signed-in" ? auth.user.name.split(/\s+/)[0] : "";
+
+  useEffect(() => {
+    api.council().then(setCouncil, () => undefined);
+  }, []);
 
   const choose = (m: CaseMode) => {
     setMode(m);
@@ -38,39 +47,58 @@ export function NewCase({ info, onOpenSidebar }: { info: ServerInfo | null; onOp
         <Menu />
       </Button>
       <div className="mx-auto flex w-full max-w-2xl flex-1 flex-col justify-center px-4 py-16">
-        <div className="rise-in text-center">
-          <h1 className="font-semibold text-3xl tracking-tight sm:text-4xl">Get a second opinion</h1>
-          <p className="mx-auto mt-3 max-w-md text-balance text-muted-foreground">
-            Several leading AI models work your case independently, critique each other anonymously, and agree on a brief you can act on.
-          </p>
+        {council && (
+          <div className="flex justify-center">
+            <div className="flex items-end gap-3">
+              {council.members.map((m, i) => (
+                <span key={m.id} className="reveal flex flex-col items-center gap-1.5" style={{ "--i": i } as React.CSSProperties} title={m.label}>
+                  <span className="flex size-10 items-center justify-center rounded-full border bg-card shadow-[var(--shadow-raised)]">
+                    <ModelLogo member={m} className="size-5" />
+                  </span>
+                </span>
+              ))}
+              <span className="reveal ml-1 flex flex-col items-center" style={{ "--i": council.members.length } as React.CSSProperties} title={`Chairman: ${council.chairman.label}`}>
+                <span className="relative flex size-10 items-center justify-center rounded-full border border-amber-500/40 bg-card shadow-[var(--shadow-raised)]">
+                  <Crown className="absolute -top-2 size-3.5 fill-amber-400 text-amber-500" />
+                  <ModelLogo member={council.chairman} className="size-5" />
+                </span>
+              </span>
+            </div>
+          </div>
+        )}
+
+        <h1 className="mt-7 text-center font-semibold text-[1.9rem] tracking-[-0.025em] sm:text-[2.25rem]">{firstName ? `What's the case, ${firstName}?` : "What's the case?"}</h1>
+        <p className="mx-auto mt-2 max-w-md text-balance text-center text-muted-foreground">
+          {council ? `${council.members.length} models will work it independently, review each other blind, and agree on a brief.` : "The council will work it independently, review each other blind, and agree on a brief."}
+        </p>
+
+        <div className="mt-8 flex justify-center">
+          <div className="inline-flex rounded-xl bg-muted p-1" role="radiogroup" aria-label="Case type">
+            {CASE_MODES.map((m) => {
+              const u = MODE_UI[m];
+              const Icon = u.icon;
+              const selected = m === mode;
+              return (
+                <button
+                  key={m}
+                  type="button"
+                  role="radio"
+                  aria-checked={selected}
+                  onClick={() => choose(m)}
+                  className={cn(
+                    "flex h-8 cursor-pointer items-center gap-1.5 rounded-lg px-3 font-medium text-sm transition-[background-color,color,box-shadow] duration-150",
+                    selected ? "bg-card text-foreground shadow-[0_1px_3px_rgb(0_0_0/10%)]" : "text-muted-foreground hover:text-foreground"
+                  )}
+                >
+                  <Icon className={cn("size-3.5", selected && u.tint)} />
+                  {u.label}
+                </button>
+              );
+            })}
+          </div>
         </div>
 
-        <div className="rise-in mt-8 grid grid-cols-2 gap-2 [animation-delay:60ms] sm:grid-cols-4" role="radiogroup" aria-label="Case type">
-          {CASE_MODES.map((m) => {
-            const u = MODE_UI[m];
-            const Icon = u.icon;
-            const selected = m === mode;
-            return (
-              <button
-                key={m}
-                type="button"
-                role="radio"
-                aria-checked={selected}
-                onClick={() => choose(m)}
-                className={cn(
-                  "group cursor-pointer rounded-xl border p-3 text-left transition-[background-color,border-color,box-shadow]",
-                  selected ? "border-primary/50 bg-card shadow-xs/5 ring-3 ring-primary/10" : "bg-transparent hover:bg-card"
-                )}
-              >
-                <Icon className={cn("size-4.5", u.tint)} />
-                <p className="mt-2 font-medium text-sm">{u.label}</p>
-                <p className="mt-0.5 text-2xs text-muted-foreground leading-snug">{u.tagline}</p>
-              </button>
-            );
-          })}
-        </div>
-
-        <div className="rise-in mt-4 [animation-delay:120ms]">
+        <div className="mt-4">
           <Composer
             size="hero"
             autoFocus
@@ -84,11 +112,14 @@ export function NewCase({ info, onOpenSidebar }: { info: ServerInfo | null; onOp
             voice={Boolean(info?.voice.available)}
             onSend={start}
           />
-          <div className="mt-3 flex flex-wrap items-center justify-between gap-2 px-1 text-xs text-muted-foreground">
-            <button type="button" className="cursor-pointer text-left underline-offset-4 hover:text-foreground hover:underline" onClick={() => setText(ui.example)}>
-              Try an example {ui.label.toLowerCase()} case →
-            </button>
-            {(mode === "medical" || mode === "legal") && <span>Test build: don't enter real patient or client identifiers.</span>}
+          <div className="mt-3 flex flex-wrap items-center justify-between gap-2 px-2 text-muted-foreground text-xs">
+            <span>
+              {ui.tagline}.{" "}
+              <button type="button" className="cursor-pointer font-medium text-foreground underline decoration-border-strong underline-offset-4 hover:decoration-foreground" onClick={() => setText(ui.example)}>
+                Try an example
+              </button>
+            </span>
+            {(mode === "medical" || mode === "legal") && <span>Don't include identifiable patient or client details.</span>}
           </div>
         </div>
       </div>

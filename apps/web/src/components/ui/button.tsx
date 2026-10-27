@@ -4,7 +4,7 @@ import type { ComponentProps } from "react";
 import { cn } from "~/lib/utils";
 
 export const buttonVariants = cva(
-  "relative inline-flex shrink-0 cursor-pointer select-none items-center justify-center gap-2 whitespace-nowrap rounded-lg border font-medium text-sm outline-none transition-[background-color,box-shadow,scale,color] active:scale-[0.97] focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1 focus-visible:ring-offset-background disabled:pointer-events-none disabled:opacity-60 [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4",
+  "relative inline-flex shrink-0 cursor-pointer select-none items-center justify-center gap-2 whitespace-nowrap rounded-lg border font-medium text-sm outline-none transition-[background-color,color,scale,box-shadow] duration-150 ease-out active:scale-[0.97] focus-visible:ring-2 focus-visible:ring-ring/60 disabled:pointer-events-none disabled:opacity-45 [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4",
   {
     defaultVariants: { size: "default", variant: "default" },
     variants: {
@@ -18,9 +18,8 @@ export const buttonVariants = cva(
         "icon-xs": "size-6 rounded-md [&_svg:not([class*='size-'])]:size-3.5"
       },
       variant: {
-        default:
-          "border-primary bg-primary text-primary-foreground shadow-primary/24 shadow-xs inset-shadow-[0_1px_rgb(255_255_255/16%)] hover:bg-primary/90",
-        outline: "border-input bg-popover text-foreground shadow-xs/5 hover:bg-accent dark:bg-input/30 dark:hover:bg-input/60",
+        default: "border-transparent bg-primary text-primary-foreground shadow-[0_1px_2px_rgb(0_0_0/12%)] hover:bg-primary/88",
+        outline: "border-border-strong bg-card text-foreground shadow-[0_1px_2px_rgb(0_0_0/4%)] hover:bg-accent",
         ghost: "border-transparent text-foreground hover:bg-accent data-[pressed]:bg-accent",
         "ghost-muted": "border-transparent text-muted-foreground hover:bg-accent hover:text-foreground",
         secondary: "border-transparent bg-secondary text-foreground hover:bg-accent",
