@@ -1,0 +1,92 @@
+{
+  "schemaVersion": 2,
+  "generatedAt": "2026-08-07T22:30:00+05:30",
+  "title": "Design System: Synod Council",
+  "extensions": {
+    "colorMeta": {
+      "guidance-mint": { "role": "primary", "displayName": "Guidance Mint", "canonical": "#91ffd4", "tonalRamp": ["#06251e", "#0c4538", "#146953", "#278d71", "#47bb95", "#68efc3", "#91ffd4", "#e8fff6"] },
+      "synthesis-violet": { "role": "secondary", "displayName": "Synthesis Violet", "canonical": "#b6a5ff", "tonalRamp": ["#151130", "#292157", "#44378d", "#6756bb", "#8979e0", "#a394f5", "#b6a5ff", "#f2efff"] },
+      "challenge-rose": { "role": "tertiary", "displayName": "Challenge Rose", "canonical": "#ff9ecf", "tonalRamp": ["#300d24", "#57153f", "#87245f", "#b64085", "#de69aa", "#f58ac2", "#ff9ecf", "#fff0f8"] },
+      "midnight-canvas": { "role": "neutral", "displayName": "Midnight Canvas", "canonical": "#060813", "tonalRamp": ["#060813", "#10142a", "#202748", "#354069", "#505d8c", "#7987b4", "#b9c4df", "#f2f5ff"] }
+    },
+    "typographyMeta": {
+      "title": { "displayName": "Conversation Title", "purpose": "Conversation and decision-plane headings." },
+      "body": { "displayName": "Decision Body", "purpose": "Verdict narrative and primary explanation." },
+      "input": { "displayName": "Conversation Input", "purpose": "Prompts and conversational responses." },
+      "label": { "displayName": "Instrument Label", "purpose": "Controls, state, and compact structural labels." }
+    },
+    "shadows": [
+      { "name": "stage-depth", "value": "0 40px 105px rgba(0, 0, 0, .52), 0 8px 34px rgba(38, 49, 102, .20)", "purpose": "Separates the decision workspace from the dimensional field." },
+      { "name": "surface-depth", "value": "0 20px 54px rgba(0, 0, 0, .28)", "purpose": "Raises navigation and utility glass." },
+      { "name": "composer-lift", "value": "0 22px 46px rgba(0, 0, 0, .28)", "purpose": "Keeps the active conversation input visually reachable." }
+    ],
+    "motion": [
+      { "name": "ease-standard", "value": "cubic-bezier(.2, .8, .2, 1)", "purpose": "State changes and restrained elevation." },
+      { "name": "fold-field", "value": "requestAnimationFrame with prefers-reduced-motion fallback", "purpose": "Canvas tessellation pointer response." }
+    ],
+    "breakpoints": [
+      { "name": "stacked", "value": "820px" },
+      { "name": "mobile", "value": "520px" }
+    ]
+  },
+  "components": [
+    {
+      "name": "Primary Commitment",
+      "kind": "button",
+      "refersTo": "button-primary",
+      "description": "The single local action that advances a conversation or decision.",
+      "html": "<button class=\"ds-button-primary\">Ask Synod</button>",
+      "css": ".ds-button-primary{height:38px;padding:0 14px;border:1px solid rgba(230,255,243,.35);border-radius:10px;background:linear-gradient(135deg,#c5ffe4,#7cecc6);color:#060813;font:600 12px -apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;cursor:pointer;box-shadow:0 14px 28px rgba(65,238,188,.18);transition:transform .18s,filter .18s}.ds-button-primary:hover{transform:translateY(-1px);filter:brightness(1.05)}.ds-button-primary:focus-visible{outline:2px solid #91ffd4;outline-offset:3px}"
+    },
+    {
+      "name": "Glass Utility Control",
+      "kind": "button",
+      "refersTo": "button-quiet",
+      "description": "Secondary action in the command header.",
+      "html": "<button class=\"ds-button-quiet\">Add context</button>",
+      "css": ".ds-button-quiet{height:38px;padding:0 14px;border:1px solid rgba(193,207,255,.16);border-radius:10px;background:rgba(255,255,255,.035);color:#f2f5ff;font:600 12px -apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;cursor:pointer;transition:background .18s,border-color .18s}.ds-button-quiet:hover{border-color:rgba(145,255,212,.38);background:linear-gradient(135deg,rgba(145,255,212,.12),rgba(182,165,255,.075))}.ds-button-quiet:focus-visible{outline:2px solid #91ffd4;outline-offset:3px}"
+    },
+    {
+      "name": "Conversation Field",
+      "kind": "input",
+      "refersTo": "input",
+      "description": "Raised indigo input for a decision or spoken transcript.",
+      "html": "<input class=\"ds-input\" value=\"Ask Synod anything…\" aria-label=\"Message Synod\" />",
+      "css": ".ds-input{width:100%;padding:10px 12px;border:1px solid rgba(195,210,255,.27);border-radius:10px;background:rgba(8,12,27,.94);color:#f2f5ff;font:450 15px/1.55 -apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif}.ds-input:focus-visible{outline:0;border-color:rgba(145,255,212,.66);box-shadow:0 0 0 4px rgba(145,255,212,.08)}"
+    },
+    {
+      "name": "Active Navigation",
+      "kind": "nav",
+      "description": "Current destination in the optical command bar.",
+      "html": "<button class=\"ds-nav-active\">Dashboard</button>",
+      "css": ".ds-nav-active{height:38px;padding:0 12px;border:1px solid rgba(145,255,212,.24);border-radius:10px;background:linear-gradient(135deg,rgba(145,255,212,.14),rgba(182,165,255,.08));color:#dfffee;font:600 12px -apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif}.ds-nav-active:focus-visible{outline:2px solid #91ffd4;outline-offset:3px}"
+    },
+    {
+      "name": "Optical Glass Plane",
+      "kind": "card",
+      "description": "Continuous container for a working conversation or structured outcome.",
+      "html": "<section class=\"ds-glass\"><strong>Conversation</strong><p>Evidence settles into a clear next step.</p></section>",
+      "css": ".ds-glass{padding:24px;border:1px solid rgba(193,207,255,.17);border-radius:16px;background:linear-gradient(135deg,rgba(27,32,63,.71),rgba(9,13,29,.64));color:#f2f5ff;box-shadow:0 20px 54px rgba(0,0,0,.28);backdrop-filter:blur(26px) saturate(125%);font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif}.ds-glass p{margin:8px 0 0;color:#9aa5bf;font-size:14px}"
+    },
+    {
+      "name": "Folded Signal Field",
+      "kind": "custom",
+      "description": "Canvas-rendered isometric material beneath real, interactive application HTML.",
+      "html": "<canvas class=\"ds-fold-field\" aria-hidden=\"true\"></canvas>",
+      "css": ".ds-fold-field{position:fixed;inset:0;z-index:0;width:100%;height:100%;pointer-events:none;background:#060813}"
+    }
+  ],
+  "narrative": {
+    "northStar": "Folded Signal Field",
+    "overview": "Synod is an operating surface with depth, not a dashboard dressed in effects. A live isometric canvas field responds beneath translucent indigo planes while the companion remains the human anchor. The result feels dimensional and personal without moving the task away from the conversation.",
+    "keyCharacteristics": ["Canvas-powered isometric depth field behind live HTML", "Indigo optical glass with mint guidance and violet synthesis", "Prominent companion stage and one continuous conversation plane", "Raised composer and disclosed council mechanics"],
+    "rules": [
+      { "name": "Field-Behind-Work", "body": "Dimensional canvas effects always sit behind interactive HTML and may never obscure text, controls, or the presenter.", "section": "colors" },
+      { "name": "Signal Rarity", "body": "Mint communicates action and healthy state; passive regions use neutral glass.", "section": "colors" },
+      { "name": "Quiet Authority", "body": "The advice should look certain because it is structured and readable, not because type is oversized or ultra-bold.", "section": "typography" },
+      { "name": "Depth-With-Purpose", "body": "3D motion communicates spatial material and input response; it never becomes navigation, progress, or a replacement for state text.", "section": "elevation" }
+    ],
+    "dos": ["Do keep the companion and live conversation dominant over the council machinery.", "Do use the canvas field as background depth only, with motion disabled or reduced when requested.", "Do preserve a continuous conversation plane and structured decision sections.", "Do reserve mint for commitment, healthy state, focus, and live input."],
+    "donts": ["Don't let a canvas, shader, or overlay cover interactive content.", "Don't expose raw provider payloads or internal reasoning as primary UI.", "Don't turn every result section into a floating rounded card.", "Don't use decorative motion that delays or confuses a decision task."]
+  }
+}

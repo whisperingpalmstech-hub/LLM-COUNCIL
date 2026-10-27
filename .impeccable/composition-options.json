@@ -1,0 +1,45 @@
+{
+  "title": "Choose Synod's command composition",
+  "question": "All three use the approved Mission Control Veil world and keep the presenter prominent. Which composition should carry into the application?",
+  "options": [
+    {
+      "id": "split",
+      "label": "Cinematic Split",
+      "kicker": "OPTION A",
+      "lineage": "Executive briefing room × flight deck",
+      "thesis": "The council chair and the decision console share the viewport as equal protagonists.",
+      "palette": ["#071018", "#DDE8F2", "#8FFFD8", "#A695FF"],
+      "materials": ["smoked optical glass", "diffraction edge"],
+      "viewport": "Presenter fills the left half; prompt, controls, and action occupy the right; mission route anchors the bottom.",
+      "risk": "The split can feel static if the route and video states do not carry motion.",
+      "hero": ".impeccable/mocks/mission-control-split.png"
+    },
+    {
+      "id": "briefing",
+      "label": "Briefing Window",
+      "kicker": "OPTION B",
+      "lineage": "Council chamber × panoramic observation glass",
+      "thesis": "The presenter opens the session, then the command shelf pulls the user directly into the decision flow.",
+      "palette": ["#071018", "#F0F5F8", "#8FFFD8", "#FF91B8"],
+      "materials": ["letterbox glass", "illuminated command shelf"],
+      "viewport": "A full-width presenter window dominates the top; one continuous composer shelf and route sit directly beneath.",
+      "risk": "The vertical sequence uses more height before the live council workspace appears.",
+      "hero": ".impeccable/mocks/mission-control-briefing.png"
+    },
+    {
+      "id": "flightpath",
+      "label": "Flight-Path Workspace",
+      "kicker": "OPTION C",
+      "lineage": "Mission plotting table × optical command visor",
+      "thesis": "One luminous route physically connects the user's question, council chair, deliberation, and verdict.",
+      "palette": ["#071018", "#DCE8F1", "#8FFFD8", "#A695FF"],
+      "materials": ["slanted visor glass", "luminous route line"],
+      "viewport": "Decision controls form a left rail; the presenter dominates upper right; live council and verdict share the lower plane.",
+      "risk": "The asymmetric geometry requires careful mobile adaptation and disciplined information density.",
+      "hero": ".impeccable/mocks/mission-control-flightpath.png"
+    }
+  ],
+  "reroll": false,
+  "canon": false,
+  "steer": true
+}
