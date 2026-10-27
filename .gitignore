@@ -6,12 +6,26 @@ pnpm-debug.log*
 
 .env
 .env.local
+.env.*
 .env.*.local
+.env.bak
 .env.bak*
+*.pem
+*.key
+*.crt
+*.p12
 
+# Local runtime data and generated files
 data/*.sqlite
 data/*.sqlite-*
 data/*.db
+data/anythingllm_storage/
+data/synod-brain-vault/
+
+# Logs and process state
+*.log
+app.log
+synod.log
 
 .DS_Store
 Thumbs.db
