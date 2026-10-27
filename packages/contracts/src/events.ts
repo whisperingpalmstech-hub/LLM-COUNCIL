@@ -10,6 +10,7 @@ import type {
   CouncilConfig,
   HandoffResult,
   SearchResult,
+  ShareLink,
   Stage1Response,
   Stage2Aggregate,
   Stage2Review,
@@ -37,6 +38,8 @@ export type ConversationEvent =
   | E<"turn.synthesis_completed", { turnId: string; synthesis: Synthesis }>
   | E<"turn.brief_generated", { turnId: string; brief: Brief }>
   | E<"turn.brief_failed", { turnId: string; error: string }>
+  | E<"turn.shared", { turnId: string; share: ShareLink }>
+  | E<"turn.share_revoked", { turnId: string; shareId: string }>
   | E<"turn.handed_off", { turnId: string; result: HandoffResult }>
   | E<"turn.completed", { turnId: string }>
   | E<"turn.failed", { turnId: string; error: string }>;
@@ -144,6 +147,12 @@ export function applyEvent(state: Conversation, event: ConversationEvent): Conve
       break;
     case "turn.synthesis_completed":
       patchTurn(() => ({ synthesis: event.synthesis }));
+      break;
+    case "turn.shared":
+      patchTurn((t) => ({ shares: [...(t.shares ?? []), event.share] }));
+      break;
+    case "turn.share_revoked":
+      patchTurn((t) => ({ shares: (t.shares ?? []).map((s) => (s.id === event.shareId ? { ...s, revoked: true } : s)) }));
       break;
     case "turn.brief_failed":
       patchTurn(() => ({ briefError: event.error }));

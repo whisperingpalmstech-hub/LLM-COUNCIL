@@ -177,6 +177,25 @@ export function verifyUploadToken(secret: string, conversationId: string, token:
   return expected.length === sig.length && crypto.timingSafeEqual(Buffer.from(expected), Buffer.from(sig));
 }
 
+/** A read-only link to one turn's document: ids + expiry, HMAC-signed. Revocation is checked separately. */
+export function signShareToken(secret: string, payload: { c: string; t: string; s: string; e: number }): string {
+  const body = Buffer.from(JSON.stringify(payload)).toString("base64url");
+  return `${body}.${crypto.createHmac("sha256", `share:${secret}`).update(body).digest("base64url")}`;
+}
+
+export function readShareToken(secret: string, token: string): { c: string; t: string; s: string; e: number } | null {
+  const [body, sig] = String(token).split(".");
+  if (!body || !sig) return null;
+  const expected = crypto.createHmac("sha256", `share:${secret}`).update(body).digest("base64url");
+  if (expected.length !== sig.length || !crypto.timingSafeEqual(Buffer.from(expected), Buffer.from(sig))) return null;
+  try {
+    const p = JSON.parse(Buffer.from(body, "base64url").toString()) as { c: string; t: string; s: string; e: number };
+    return p.e > Date.now() ? p : null;
+  } catch {
+    return null;
+  }
+}
+
 /** Fixed-window limiter for sign-in attempts. */
 export class RateLimiter {
   private readonly hits = new Map<string, { count: number; reset: number }>();

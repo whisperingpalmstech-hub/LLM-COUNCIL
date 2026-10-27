@@ -1,3 +1,4 @@
+import crypto from "node:crypto";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -25,7 +26,8 @@ import { handOffToHermes } from "../integrations/hermes.ts";
 import type { WebSearch } from "../integrations/search.ts";
 import { MAX_AUDIO_BYTES, type Transcriber } from "../integrations/transcription.ts";
 import type { ProviderRegistry } from "../providers/registry.ts";
-import { AuthError, RateLimiter, signUploadToken, verifyUploadToken, type Accounts } from "../auth/accounts.ts";
+import { AuthError, RateLimiter, readShareToken, signShareToken, signUploadToken, verifyUploadToken, type Accounts } from "../auth/accounts.ts";
+import { renderDocument } from "../artifact/render.ts";
 import { googleAuthUrl, googleProfile, OAUTH_COOKIE, readState } from "../auth/google.ts";
 import { RECIPES } from "../council/recipes.ts";
 import { clearSessionCookie, isHttps, readCookie, SESSION_COOKIE, sessionUser, setSessionCookie } from "./session.ts";
@@ -249,6 +251,39 @@ export function createApp({ config, store, engine, providers, search, transcribe
     res.send(briefMarkdown(turn.brief, turn.prompt));
   });
 
+  // ---- the second-opinion document ----
+  const turnWithBrief = (req: Request) => {
+    const conversation = owned(String(req.params.id), req.user);
+    const turn = conversation.turns.find((t) => t.id === req.params.turnId);
+    if (!turn?.brief) throw Object.assign(new Error("This answer has no brief yet."), { status: 404 });
+    return { conversation, turn, brief: turn.brief };
+  };
+  api.get("/conversations/:id/turns/:turnId/brief.html", (req, res) => {
+    const { turn, brief } = turnWithBrief(req);
+    const theme = req.query.theme === "dark" || req.query.theme === "light" ? req.query.theme : undefined;
+    const doc = renderDocument(turn, brief, { embed: req.query.embed === "1", theme });
+    res.setHeader("Content-Security-Policy", doc.csp);
+    res.setHeader("X-Frame-Options", "SAMEORIGIN");
+    res.setHeader("Cache-Control", "private, no-store");
+    if (req.query.download === "1") res.setHeader("Content-Disposition", `attachment; filename="synod-second-opinion-v${brief.version}.html"`);
+    res.type("html").send(doc.html);
+  });
+  api.post("/conversations/:id/turns/:turnId/share", (req, res) => {
+    const { conversation, turn } = turnWithBrief(req);
+    const days = [1, 7, 30].includes(Number(req.body?.days)) ? Number(req.body.days) : 1;
+    const expires = Date.now() + days * 86_400_000;
+    const share = { id: crypto.randomUUID(), createdAt: new Date().toISOString(), expiresAt: new Date(expires).toISOString() };
+    store.append({ type: "turn.shared", conversationId: conversation.id, turnId: turn.id, share });
+    const base = config.publicBaseUrl ?? `${isHttps(req) ? "https" : "http"}://${req.headers.host}`;
+    res.status(201).json({ share, url: `${base}/s/${signShareToken(secret, { c: conversation.id, t: turn.id, s: share.id, e: expires })}` });
+  });
+  api.delete("/conversations/:id/turns/:turnId/share/:shareId", (req, res) => {
+    const { conversation, turn } = turnWithBrief(req);
+    if (!turn.shares?.some((s) => s.id === req.params.shareId)) throw Object.assign(new Error("Share link not found."), { status: 404 });
+    store.append({ type: "turn.share_revoked", conversationId: conversation.id, turnId: turn.id, shareId: String(req.params.shareId) });
+    res.json({ ok: true });
+  });
+
   api.post("/conversations/:id/turns/:turnId/handoff", async (req, res) => {
     const conversation = owned(req.params.id, req.user);
     const turn = conversation.turns.find((t) => t.id === req.params.turnId);
@@ -266,6 +301,28 @@ export function createApp({ config, store, engine, providers, search, transcribe
 
   app.use("/api", api);
   app.use("/api", (_req, res) => res.status(404).json({ error: "Not found." }));
+
+  // Public, read-only shared documents. No scripts, not indexable, not cached by proxies.
+  app.get("/s/:token", (req, res) => {
+    const notFound = () =>
+      res
+        .status(404)
+        .setHeader("Content-Security-Policy", "default-src 'none'; style-src 'unsafe-inline'")
+        .type("html")
+        .send('<!doctype html><meta name="robots" content="noindex"><title>Link unavailable</title><body style="font:15px system-ui;margin:20vh auto;max-width:28rem;color:#555;text-align:center"><h1 style="font-size:1.2rem;color:#111">This link is no longer available</h1><p>It may have expired or been turned off by the person who shared it. Ask them for a new link.</p></body>');
+    const token = readShareToken(secret, String(req.params.token));
+    if (!token) return notFound();
+    const turn = store.get(token.c)?.turns.find((t) => t.id === token.t);
+    const share = turn?.shares?.find((s) => s.id === token.s);
+    if (!turn?.brief || !share || share.revoked) return notFound();
+    const until = new Intl.DateTimeFormat("en-GB", { day: "numeric", month: "long", year: "numeric", hour: "2-digit", minute: "2-digit", timeZone: "UTC", timeZoneName: "short" }).format(new Date(share.expiresAt));
+    const doc = renderDocument(turn, turn.brief, { sharedUntil: until });
+    res.setHeader("Content-Security-Policy", doc.csp);
+    res.setHeader("X-Robots-Tag", "noindex, nofollow");
+    res.setHeader("Referrer-Policy", "no-referrer");
+    res.setHeader("Cache-Control", "private, no-store");
+    res.type("html").send(doc.html);
+  });
 
   // Attachments are private: only the owner of the case they belong to can open them.
   app.use("/uploads", (req, res, next) => {

@@ -1,11 +1,14 @@
 // The second opinion, set like a document: a serif verdict, then the reasoning in quiet sections.
-import { AlertTriangle, Check, Copy, Download, Send } from "lucide-react";
+import { Menu } from "@base-ui/react/menu";
+import { AlertTriangle, Check, ChevronDown, Copy, Download, ExternalLink, FileText, Send } from "lucide-react";
 import { useEffect, useState } from "react";
 import type { Brief, BriefItem, CouncilMember, Turn } from "@synod/contracts";
 import { api } from "~/lib/api";
 import { MODE_UI } from "~/lib/modes";
 import { cn } from "~/lib/utils";
 import { ModelLogo } from "../ModelLogo";
+import { DocumentView } from "./DocumentView";
+import { SharePopover } from "./SharePopover";
 import { Button, buttonVariants } from "../ui/button";
 import { Badge, SectionTitle } from "../ui/misc";
 
@@ -29,20 +32,47 @@ export function BriefCard({ conversationId, turn, brief, hermesConfigured }: { c
   const mode = MODE_UI[brief.mode];
   const ModeIcon = mode.icon;
   // Animate the reveal only when the brief has just arrived, not when revisiting a case.
+  const [view, setView] = useState<"brief" | "document">("brief");
+  const docUrl = api.briefHtmlUrl(conversationId, turn.id);
   const fresh = Boolean(turn.completedAt ? Date.now() - new Date(turn.completedAt).getTime() < 15_000 : turn.status === "running");
   let i = 0;
   const step = () => (fresh ? { className: "reveal", style: { "--i": i++ } as React.CSSProperties } : {});
 
   return (
     <article className="overflow-hidden rounded-3xl border bg-card shadow-[var(--shadow-raised)]">
-      <header className="px-6 pt-6 pb-5 sm:px-8 sm:pt-8">
+      <div className="flex items-center gap-2 px-6 pt-5 text-muted-foreground text-xs sm:px-8">
+        <ModeIcon className={cn("size-3.5", mode.tint)} />
+        <span>{mode.label} second opinion</span>
+        {brief.version > 1 && <span className="text-faint">(revision {brief.version})</span>}
+        <div className="ml-auto inline-flex rounded-lg bg-muted p-0.5" role="tablist" aria-label="View">
+          {(
+            [
+              ["brief", "Brief"],
+              ["document", "Document"]
+            ] as const
+          ).map(([value, label]) => (
+            <button
+              key={value}
+              type="button"
+              role="tab"
+              aria-selected={view === value}
+              onClick={() => setView(value)}
+              className={cn("h-6 cursor-pointer rounded-md px-2.5 font-medium transition-[background-color,color,box-shadow] duration-150", view === value ? "bg-card text-foreground shadow-[0_1px_2px_rgb(0_0_0/10%)]" : "hover:text-foreground")}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
+      </div>
+      {view === "document" ? (
+        <div className="mt-4 border-t">
+          <DocumentView src={docUrl} title={brief.verdict || "Second opinion"} />
+        </div>
+      ) : (
+      <>
+      <header className="px-6 pt-3 pb-5 sm:px-8">
         <div {...step()}>
-          <div className="flex items-center gap-2 text-muted-foreground text-xs">
-            <ModeIcon className={cn("size-3.5", mode.tint)} />
-            <span>{mode.label} second opinion</span>
-            {brief.version > 1 && <span className="text-faint">(revision {brief.version})</span>}
-          </div>
-          <h2 className="mt-3 font-serif text-[1.75rem] leading-[1.15] tracking-[-0.015em] sm:text-[2rem]" style={{ fontVariationSettings: '"opsz" 36' }}>
+          <h2 className="mt-1 font-serif text-[1.75rem] leading-[1.15] tracking-[-0.015em] sm:text-[2rem]" style={{ fontVariationSettings: '"opsz" 36' }}>
             {brief.verdict || "Assessment"}
           </h2>
           {brief.bottomLine && <p className="mt-3 max-w-[62ch] font-serif text-[1.0625rem] text-foreground/80 leading-relaxed">{brief.bottomLine}</p>}
@@ -158,14 +188,15 @@ export function BriefCard({ conversationId, turn, brief, hermesConfigured }: { c
           </div>
         )}
       </div>
+      </>
+      )}
 
       <footer className="flex flex-wrap items-center gap-3 border-t bg-muted/60 px-6 py-3.5 sm:px-8">
         {brief.caveats.length > 0 && <p className="mr-auto max-w-md text-2xs text-muted-foreground leading-snug">{brief.caveats.join(" ")}</p>}
         <div className="ml-auto flex items-center gap-1.5">
           <CopyBrief conversationId={conversationId} turnId={turn.id} />
-          <a className={buttonVariants({ variant: "outline", size: "sm" })} href={api.briefUrl(conversationId, turn.id)} download>
-            <Download /> Export
-          </a>
+          <ExportMenu conversationId={conversationId} turnId={turn.id} docUrl={docUrl} />
+          <SharePopover conversationId={conversationId} turn={turn} />
           {brief.mode === "code" && <Handoff conversationId={conversationId} turn={turn} configured={hermesConfigured} />}
         </div>
       </footer>
@@ -249,6 +280,35 @@ function CouncilStack({ members }: { members: CouncilMember[] }) {
       </span>
       Weighed by {members.length} models
     </div>
+  );
+}
+
+function ExportMenu({ conversationId, turnId, docUrl }: { conversationId: string; turnId: string; docUrl: string }) {
+  const item = "flex h-8 cursor-pointer items-center gap-2.5 rounded-lg px-2.5 text-sm outline-none data-[highlighted]:bg-accent [&_svg]:size-4 [&_svg]:text-muted-foreground";
+  return (
+    <Menu.Root>
+      <Menu.Trigger className={buttonVariants({ variant: "outline", size: "sm" })}>
+        <Download /> Export <ChevronDown className="size-3" />
+      </Menu.Trigger>
+      <Menu.Portal>
+        <Menu.Positioner side="top" align="end" sideOffset={6} className="z-50">
+          <Menu.Popup className="w-60 origin-[var(--transform-origin)] rounded-2xl border bg-popover p-1.5 shadow-[0_16px_40px_-12px_rgb(0_0_0/0.25)] outline-none transition-[opacity,scale] duration-150 ease-[var(--ease-out)] data-ending-style:scale-[0.97] data-ending-style:opacity-0 data-starting-style:scale-[0.97] data-starting-style:opacity-0">
+            <Menu.Item className={item} onClick={() => window.open(docUrl, "_blank", "noopener")}>
+              <ExternalLink /> Open document
+            </Menu.Item>
+            <Menu.Item className={item} onClick={() => window.open(docUrl, "_blank", "noopener")}>
+              <FileText /> Print or save as PDF
+            </Menu.Item>
+            <Menu.Item className={item} onClick={() => (location.href = `${docUrl}?download=1`)}>
+              <Download /> Download HTML
+            </Menu.Item>
+            <Menu.Item className={item} onClick={() => (location.href = api.briefUrl(conversationId, turnId))}>
+              <Download /> Download Markdown
+            </Menu.Item>
+          </Menu.Popup>
+        </Menu.Positioner>
+      </Menu.Portal>
+    </Menu.Root>
   );
 }
 

@@ -139,6 +139,29 @@ export interface NextStep {
   urgency: "now" | "soon" | "later";
 }
 
+export type Level = "high" | "medium" | "low";
+
+/**
+ * Visuals the chairman can choose for the shareable document. The model only supplies
+ * data in these shapes; Synod renders them (no model-written HTML).
+ */
+export type Visual =
+  | { kind: "ranked"; title: string; scale: "likelihood" | "strength" | "severity" | "priority"; items: { label: string; value: number; note?: string }[] }
+  | { kind: "timeline"; title: string; events: { when: string; label: string; detail?: string; urgent?: boolean }[] }
+  | { kind: "decision"; title: string; branches: { condition: string; action: string }[]; otherwise?: string }
+  | { kind: "comparison"; title: string; options: string[]; rows: { criterion: string; cells: string[] }[]; recommended?: number }
+  | { kind: "risk"; title: string; items: { label: string; likelihood: Level; impact: Level }[] };
+
+export const VISUAL_KINDS = ["ranked", "timeline", "decision", "comparison", "risk"] as const;
+
+/** A read-only link to one turn's document. The secret part of the URL is never stored in events. */
+export interface ShareLink {
+  id: string;
+  createdAt: string;
+  expiresAt: string;
+  revoked?: boolean;
+}
+
 /** The structured second opinion distilled from the council's work. */
 export interface Brief {
   version: number;
@@ -159,6 +182,8 @@ export interface Brief {
   nextSteps: NextStep[];
   openQuestions: string[];
   caveats: string[];
+  /** 0-3 visuals for the shareable document, chosen to fit the case. */
+  visuals?: Visual[];
 }
 
 export interface HandoffResult {
@@ -218,6 +243,7 @@ export interface Turn {
   brief?: Brief;
   /** Why the brief is missing, when the chairman couldn't produce it. */
   briefError?: string;
+  shares?: ShareLink[];
   handoff?: HandoffResult;
   error?: string;
   startedAt: string;

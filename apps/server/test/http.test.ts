@@ -152,3 +152,30 @@ test("Google sign-in is hidden when unconfigured", async () => {
   assert.equal(((await (await client().call("/api/auth/config")).json()) as { google: boolean }).google, false);
   assert.equal((await client().call("/api/auth/google/start")).status, 404);
 });
+
+test("the document can be opened by its owner and shared read-only, then revoked", async () => {
+  const conversation = (await (await alice.call("/api/conversations", { method: "POST", body: JSON.stringify({ mode: "general" }) })).json()) as Conversation;
+  const sent = await alice.call(`/api/conversations/${conversation.id}/messages`, { method: "POST", body: JSON.stringify({ prompt: "A long enough question for the mock council to answer directly, please.", depth: "quick" }) });
+  const { turnId } = (await sent.json()) as { turnId: string };
+  await instance.engine.idle();
+
+  const own = await alice.call(`/api/conversations/${conversation.id}/turns/${turnId}/brief.html`);
+  assert.equal(own.status, 200);
+  assert.match(own.headers.get("content-security-policy") ?? "", /script-src 'none'/);
+  const ownHtml = await own.text();
+  assert.match(ownHtml, /What happens when/, "visuals render");
+  assert.ok(!ownHtml.includes("Should be dropped"), "unknown visual kinds are dropped");
+  assert.equal((await admin.call(`/api/conversations/${conversation.id}/turns/${turnId}/brief.html`)).status, 404, "other users can't open it");
+  assert.equal((await admin.call(`/api/conversations/${conversation.id}/turns/${turnId}/share`, { method: "POST", body: "{}" })).status, 404, "or share it");
+
+  const shared = (await (await alice.call(`/api/conversations/${conversation.id}/turns/${turnId}/share`, { method: "POST", body: JSON.stringify({ days: 7 }) })).json()) as { url: string; share: { id: string } };
+  const path = new URL(shared.url).pathname;
+  const pub = await fetch(base + path);
+  assert.equal(pub.status, 200, "anyone with the link can read it");
+  assert.equal(pub.headers.get("x-robots-tag"), "noindex, nofollow");
+  assert.match(await pub.text(), /Shared link valid until/);
+
+  await alice.call(`/api/conversations/${conversation.id}/turns/${turnId}/share/${shared.share.id}`, { method: "DELETE" });
+  assert.equal((await fetch(base + path)).status, 404, "revoked links stop working");
+  assert.equal((await fetch(base + "/s/forged.token")).status, 404);
+});

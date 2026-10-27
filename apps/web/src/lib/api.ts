@@ -13,6 +13,7 @@ import type {
   CouncilConfig,
   HandoffResult,
   ServerInfo,
+  ShareLink,
   TranscriptionResponse,
   UploadAttachmentRequest
 } from "@synod/contracts";
@@ -49,6 +50,9 @@ export const api = {
   cancel: (id: string) => post(`/api/conversations/${id}/cancel`),
   handoff: (id: string, turnId: string) => post<HandoffResult>(`/api/conversations/${id}/turns/${turnId}/handoff`),
   briefUrl: (id: string, turnId: string) => `/api/conversations/${id}/turns/${turnId}/brief.md`,
+  briefHtmlUrl: (id: string, turnId: string) => `/api/conversations/${id}/turns/${turnId}/brief.html`,
+  share: (id: string, turnId: string, days: 1 | 7 | 30) => post<{ url: string; share: ShareLink }>(`/api/conversations/${id}/turns/${turnId}/share`, { days }),
+  revokeShare: (id: string, turnId: string, shareId: string) => request(`/api/conversations/${id}/turns/${turnId}/share/${shareId}`, { method: "DELETE" }),
   upload: (id: string, body: UploadAttachmentRequest, token?: string) =>
     post<Attachment>(`/api/conversations/${id}/attachments${token ? `?token=${encodeURIComponent(token)}` : ""}`, body),
   uploadLink: (id: string) => request<{ url: string }>(`/api/conversations/${id}/upload-link`),

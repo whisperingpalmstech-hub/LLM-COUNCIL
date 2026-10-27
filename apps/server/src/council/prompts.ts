@@ -166,8 +166,16 @@ ${sections}
   "nextSteps": [{"action": string, "why": string, "urgency": "now"|"soon"|"later"}],
   "consensus": string[],        // points the members agreed on
   "disagreements": [{"point": string, "positions": string[]}],  // real disagreements between members, each position naming who held it
-  "openQuestions": string[]     // facts that would change the opinion
+  "openQuestions": string[],    // facts that would change the opinion
+  "visuals": []                 // 0-3 visuals for the printable document; see below
 }
+
+Visuals: choose up to 3 that make THIS case clearer at a glance, using only facts already in the brief. Use [] if none adds real signal. Shapes:
+  {"kind": "ranked", "title": string, "scale": "likelihood"|"strength"|"severity"|"priority", "items": [{"label": string, "value": 0-100, "note": string}]}   // e.g. a differential by likelihood, arguments by strength
+  {"kind": "timeline", "title": string, "events": [{"when": string, "label": string, "detail": string, "urgent": boolean}]}   // deadlines, limitation dates, treatment or rollout steps; "when" like "Now", "Within 24h", "2 Jan 2027"
+  {"kind": "decision", "title": string, "branches": [{"condition": string, "action": string}], "otherwise": string}   // if/then paths, e.g. "If CTPA is negative" -> "Stop LMWH unless…"
+  {"kind": "comparison", "title": string, "options": string[], "rows": [{"criterion": string, "cells": string[]}], "recommended": index}   // 2-4 options compared on criteria
+  {"kind": "risk", "title": string, "items": [{"label": string, "likelihood": "high"|"medium"|"low", "impact": "high"|"medium"|"low"}]}   // risks placed by likelihood and impact
 Use the section titles above when they fit the question. If the question is a different kind (for example a medication-interaction question, or a legal question about a clinical event), replace them with 2-4 section titles that fit it better, in the same shape.
 Correct errors silently in the content; mention a member's mistake only inside "disagreements", never in the verdict, bottom line, or red flags.
 Be faithful to what the council actually said. Keep items short; put reasoning in "detail".`;

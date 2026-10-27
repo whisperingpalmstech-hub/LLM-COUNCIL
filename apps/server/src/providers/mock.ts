@@ -77,7 +77,12 @@ export class MockProvider implements Provider {
           nextSteps: [{ action: "Connect a real model provider", why: "Mock output is not advice", urgency: "now" }],
           consensus: ["Members agreed on the overall direction."],
           disagreements: [{ point: "How cautious to be", positions: ["Mock Analyst: move now", "Mock Skeptic: wait for more data"] }],
-          openQuestions: ["What would change the answer?"]
+          openQuestions: ["What would change the answer?"],
+          visuals: [
+            { kind: "ranked", title: "Options by strength", scale: "strength", items: [{ label: "Pilot first", value: 80, note: "Lowest regret" }, { label: "Full launch", value: 45 }] },
+            { kind: "timeline", title: "What happens when", events: [{ when: "Now", label: "Agree the success metric", urgent: true }, { when: "Week 2", label: "Review pilot results" }] },
+            { kind: "unknown-kind", title: "Should be dropped" }
+          ]
         });
       }
     }
