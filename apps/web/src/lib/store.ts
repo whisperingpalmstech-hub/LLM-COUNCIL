@@ -55,7 +55,13 @@ class ClientStore {
       }
       const { event } = push;
       const finalKey =
-        event.type === "turn.stage1_response" ? `${event.turnId}:stage1:${event.response.memberId}` : event.type === "turn.synthesis_completed" ? `${event.turnId}:synthesis` : null;
+        event.type === "turn.stage1_response"
+          ? `${event.turnId}:stage1:${event.response.memberId}`
+          : event.type === "turn.synthesis_completed"
+            ? `${event.turnId}:synthesis`
+            : event.type === "chat.message" && event.message.author.kind === "model"
+              ? `chat:chat:${event.message.author.memberId}`
+              : null;
       if (finalKey && this.drafts.has(finalKey)) {
         this.drafts = new Map(this.drafts);
         this.drafts.delete(finalKey);

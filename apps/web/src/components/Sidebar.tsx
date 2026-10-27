@@ -1,5 +1,5 @@
 import { Menu } from "@base-ui/react/menu";
-import { Archive, ArchiveRestore, ChevronsUpDown, LogOut, Monitor, Moon, PenSquare, Search, Settings2, Sun, X } from "lucide-react";
+import { Archive, ArchiveRestore, ChevronsUpDown, LogOut, MessagesSquare, Monitor, Moon, PenSquare, Search, Settings2, Sun, X } from "lucide-react";
 import { useEffect, useState } from "react";
 import type { ConversationSummary } from "@synod/contracts";
 import { api } from "~/lib/api";
@@ -180,7 +180,7 @@ function SidebarAction({ icon, label, hint, onClick }: { icon: React.ReactNode; 
 
 function CaseRow({ summary: s, active }: { summary: ConversationSummary; active: boolean }) {
   const mode = MODE_UI[s.mode ?? "general"];
-  const Icon = mode.icon;
+  const Icon = s.kind === "chat" ? MessagesSquare : mode.icon;
   return (
     <div
       className={cn(

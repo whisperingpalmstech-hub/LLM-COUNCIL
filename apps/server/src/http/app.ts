@@ -198,7 +198,7 @@ export function createApp({ config, store, engine, providers, search, transcribe
   api.get("/conversations", (req, res) => res.json(store.summaries().filter((s) => canAccess(store.require(s.id), req.user!))));
   api.post("/conversations", (req, res) => {
     const body = req.body as CreateConversationRequest;
-    const id = engine.createConversation(body?.title, body?.mode, req.user!.id);
+    const id = engine.createConversation(body?.title, body?.mode, req.user!.id, body?.kind === "chat" ? "chat" : "council");
     res.status(201).json(store.require(id));
   });
   api.get("/conversations/:id", (req, res) => res.json(owned(req.params.id, req.user)));
@@ -232,6 +232,28 @@ export function createApp({ config, store, engine, providers, search, transcribe
     });
     res.status(202).json({ turnId });
   });
+  // ---- Discuss mode ----
+  const sendOptions = (req: Request) => ({
+    timezone: typeof req.body?.timezone === "string" ? req.body.timezone.slice(0, 64) : undefined,
+    profile: req.user!.profile,
+    userId: req.user!.id
+  });
+  api.post("/conversations/:id/chat", async (req, res) => {
+    owned(String(req.params.id), req.user);
+    await engine.chat(String(req.params.id), String(req.body?.text ?? ""), sendOptions(req));
+    res.status(202).json({ ok: true });
+  });
+  api.post("/conversations/:id/chat/stop", (req, res) => {
+    owned(String(req.params.id), req.user);
+    engine.stopDiscussion(String(req.params.id));
+    res.json({ ok: true });
+  });
+  api.post("/conversations/:id/wrap-up", async (req, res) => {
+    owned(String(req.params.id), req.user);
+    const turnId = await engine.wrapUp(String(req.params.id), sendOptions(req));
+    res.status(202).json({ turnId });
+  });
+
   api.post("/conversations/:id/clarification", (req, res) => {
     owned(req.params.id, req.user);
     engine.answerClarification(req.params.id, String((req.body as AnswerClarificationRequest)?.answer ?? ""));

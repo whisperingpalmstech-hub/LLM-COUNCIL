@@ -5,6 +5,8 @@ import type {
   Attachment,
   Brief,
   CaseContext,
+  ChatMessage,
+  ModeratorNote,
   CaseMode,
   Conversation,
   CouncilConfig,
@@ -21,12 +23,15 @@ import type {
 type E<T extends string, P> = { type: T; seq: number; conversationId: string; at: string } & P;
 
 export type ConversationEvent =
-  | E<"conversation.created", { title: string; mode: CaseMode; ownerId?: string; autoMode?: boolean }>
+  | E<"conversation.created", { title: string; mode: CaseMode; ownerId?: string; autoMode?: boolean; kind?: "council" | "chat" }>
+  | E<"chat.message", { message: ChatMessage }>
+  | E<"chat.moderated", { note: ModeratorNote }>
+  | E<"chat.busy", { busy: boolean }>
   | E<"conversation.mode_changed", { mode: CaseMode }>
   | E<"conversation.renamed", { title: string }>
   | E<"conversation.archived", { archived: boolean }>
   | E<"attachment.added", { attachment: Attachment }>
-  | E<"turn.started", { turnId: string; prompt: string; mode: CaseMode; council: CouncilConfig; rounds?: number; context?: CaseContext }>
+  | E<"turn.started", { turnId: string; prompt: string; mode: CaseMode; council: CouncilConfig; rounds?: number; context?: CaseContext; wrapUp?: boolean }>
   | E<"turn.stage_started", { turnId: string; stage: TurnStage; cycle?: number }>
   | E<"turn.converged", { turnId: string; cycle: number }>
   | E<"turn.clarification_requested", { turnId: string; question: string }>
@@ -64,7 +69,7 @@ export interface DraftPush {
 export type ServerPush = { type: "event"; event: ConversationEvent } | DraftPush;
 
 export function emptyConversation(id: string): Conversation {
-  return { id, title: "", mode: "general", archived: false, createdAt: "", updatedAt: "", pendingAttachments: [], turns: [], seq: 0 };
+  return { id, kind: "council", chat: [], notes: [], chatBusy: false, title: "", mode: "general", archived: false, createdAt: "", updatedAt: "", pendingAttachments: [], turns: [], seq: 0 };
 }
 
 export function applyEvent(state: Conversation, event: ConversationEvent): Conversation {
@@ -84,6 +89,16 @@ export function applyEvent(state: Conversation, event: ConversationEvent): Conve
       next.mode = event.mode ?? "general"; // cases created before modes existed
       if (event.ownerId) next.ownerId = event.ownerId;
       if (event.autoMode) next.autoMode = true;
+      if (event.kind) next.kind = event.kind;
+      break;
+    case "chat.message":
+      next.chat = [...next.chat, event.message];
+      break;
+    case "chat.moderated":
+      next.notes = [...next.notes, event.note];
+      break;
+    case "chat.busy":
+      next.chatBusy = event.busy;
       next.createdAt = event.at;
       break;
     case "conversation.mode_changed":
@@ -110,6 +125,7 @@ export function applyEvent(state: Conversation, event: ConversationEvent): Conve
           stage: null,
           council: event.council,
           rounds: event.rounds ?? 3,
+          ...(event.wrapUp ? { wrapUp: true } : {}),
           cycle: 1,
           ...(event.context ? { context: event.context } : {}),
           research: [],

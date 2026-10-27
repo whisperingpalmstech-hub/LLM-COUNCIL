@@ -181,7 +181,7 @@ Correct errors silently in the content; mention a member's mistake only inside "
 Be faithful to what the council actually said. Keep items short; put reasoning in "detail".`;
 }
 
-function aboutBlock(context?: CaseContext): string {
+export function aboutBlock(context?: CaseContext): string {
   if (!context) return "";
   const p = context.profile;
   const who = p

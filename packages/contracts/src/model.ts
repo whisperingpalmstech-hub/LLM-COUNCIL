@@ -233,6 +233,8 @@ export interface Turn {
   /** Stopped before the planned rounds because reviewers already agreed. */
   convergedEarly?: boolean;
   context?: CaseContext;
+  /** Produced by "Wrap up" from a group discussion rather than a council run. */
+  wrapUp?: boolean;
   clarification?: { question: string; answer?: string };
   research: SearchResult[];
   stage1: Stage1Response[];
@@ -262,8 +264,32 @@ export interface AuthUser {
 /** How new accounts can be created on this server. */
 export type SignupMode = "first-user" | "invite" | "open" | "closed";
 
+/** One message in a Discuss (group chat) conversation. */
+export interface ChatMessage {
+  id: string;
+  author: { kind: "user" } | { kind: "model"; memberId: string; label: string; provider: ProviderId; model: string };
+  text: string;
+  at: string;
+  error?: string;
+}
+
+/** The moderator's call on who speaks next, shown as a quiet note in the chat. */
+export interface ModeratorNote {
+  id: string;
+  speakers: string[];
+  reason: string;
+  at: string;
+}
+
 export interface Conversation {
   id: string;
+  /** "council" gives a structured second opinion; "chat" is a moderated group discussion. */
+  kind: "council" | "chat";
+  /** Discuss mode: the group chat, in order. */
+  chat: ChatMessage[];
+  notes: ModeratorNote[];
+  /** A model is replying (or about to). */
+  chatBusy: boolean;
   /** Owning user. Absent on cases created before accounts existed (visible to admins). */
   ownerId?: string;
   title: string;
@@ -282,6 +308,7 @@ export interface Conversation {
 
 export interface ConversationSummary {
   id: string;
+  kind: "council" | "chat";
   title: string;
   mode: CaseMode;
   archived: boolean;

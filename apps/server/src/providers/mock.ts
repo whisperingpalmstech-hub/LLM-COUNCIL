@@ -60,6 +60,16 @@ export class MockProvider implements Provider {
       }
       case "synthesis":
         return `**[mock:${model}]** Council synthesis (offline demo).\n\nThe council agrees: run a small, time-boxed pilot with a clear stop/scale gate before committing further resources.`;
+      case "moderate": {
+        const ids = [...prompt.matchAll(/- id: (\S+) \|/g)].map((m) => m[1]);
+        const fresh = prompt.includes("The user just wrote");
+        return JSON.stringify(fresh ? { speakers: ids.slice(0, 2), reason: "Two different angles" } : { speakers: [], reason: "" });
+      }
+      case "chat": {
+        const lines = prompt.split("\n").filter((l) => /^[^:]{1,40}: /.test(l));
+        const previous = lines.at(-1)?.split(":")[0] ?? "everyone";
+        return `[mock:${model}] Building on ${previous}: I'd test the riskiest assumption first.`;
+      }
       case "brief": {
         const sections = [...prompt.matchAll(/\{"title": "([^"]+)"/g)].map((m) => ({
           title: m[1],

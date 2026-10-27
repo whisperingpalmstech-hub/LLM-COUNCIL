@@ -1,6 +1,6 @@
 import type { ProviderId } from "@synod/contracts";
 
-export type CompletionPurpose = "clarify" | "answer" | "review" | "synthesis" | "brief";
+export type CompletionPurpose = "clarify" | "answer" | "review" | "synthesis" | "brief" | "moderate" | "chat";
 
 export interface ImageInput {
   mimeType: string;

@@ -9,6 +9,7 @@ import { Composer } from "../Composer";
 import { DepthPicker } from "../DepthPicker";
 import { Button } from "../ui/button";
 import { CouncilPanel, type PanelTab } from "./CouncilPanel";
+import { DiscussionView } from "./DiscussionView";
 import { TurnBlock } from "./TurnBlock";
 
 export function CaseView({ id, info, onOpenSidebar }: { id: string; info: ServerInfo | null; onOpenSidebar: () => void }) {
@@ -38,6 +39,14 @@ export function CaseView({ id, info, onOpenSidebar }: { id: string; info: Server
   const panelTurn = panel ? conversation.turns.find((t) => t.id === panel.turnId) : undefined;
 
   const openPanel = (turnId: string, tab: PanelTab, memberId?: string) => setPanel({ turnId, tab, memberId });
+
+  if (conversation.kind === "chat") {
+    return (
+      <div className="flex min-h-0 flex-1">
+        <DiscussionView conversation={conversation} info={info} onOpenSidebar={onOpenSidebar} onOpenPanel={() => undefined} />
+      </div>
+    );
+  }
 
   return (
     <div className="flex min-h-0 flex-1">

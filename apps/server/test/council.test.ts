@@ -366,3 +366,64 @@ test("an auto case is routed to the right mode from its first message", async ()
   assert.equal(store.require(id).mode, "legal");
   assert.equal(store.require(id).turns[0].mode, "legal");
 });
+
+async function discussionIdle(engine: CouncilEngine, store: EventStore, id: string) {
+  for (let i = 0; i < 200 && store.require(id).chatBusy; i++) await new Promise((r) => setTimeout(r, 10));
+  await engine.idle();
+}
+
+test("Discuss: the moderator picks who replies, models see each other, then the panel stops for the user", async () => {
+  const { engine, store } = setup();
+  engine.saveCouncil(council());
+  const id = engine.createConversation(undefined, "general", undefined, "chat");
+  await engine.chat(id, "Should we hire a head of sales before product-market fit?");
+  await discussionIdle(engine, store, id);
+  const c = store.require(id);
+  assert.equal(c.kind, "chat");
+  assert.equal(c.chatBusy, false);
+  assert.deepEqual(c.chat.map((m) => (m.author.kind === "user" ? "user" : m.author.memberId)), ["user", "a", "b"]);
+  assert.match(c.chat[2].text, /Building on Alpha/, "the second speaker sees the first");
+  assert.equal(c.notes[0].reason, "Two different angles");
+  assert.equal(c.title, "Should we hire a head of sales before product-market fit?");
+});
+
+test("Discuss: @mentions go straight to that panellist", async () => {
+  const { engine, store } = setup();
+  engine.saveCouncil(council());
+  const id = engine.createConversation(undefined, "general", undefined, "chat");
+  await engine.chat(id, "@Gamma what's the strongest counter-argument?");
+  await discussionIdle(engine, store, id);
+  const models = store.require(id).chat.filter((m) => m.author.kind === "model");
+  assert.equal(models[0].author.kind === "model" && models[0].author.memberId, "c");
+  assert.equal(store.require(id).notes[0].reason, "You asked them directly");
+});
+
+test("Discuss: wrap up turns the discussion into a brief", async () => {
+  const { engine, store } = setup();
+  engine.saveCouncil(council());
+  const id = engine.createConversation(undefined, "code", undefined, "chat");
+  await assert.rejects(() => engine.wrapUp(id), /Discuss something first/);
+  await engine.chat(id, "Monorepo or polyrepo for 4 teams?");
+  await discussionIdle(engine, store, id);
+  await engine.wrapUp(id);
+  await engine.idle();
+  const turn = store.require(id).turns[0];
+  assert.equal(turn.wrapUp, true);
+  assert.equal(turn.status, "completed", turn.error);
+  assert.ok(turn.synthesis?.text);
+  assert.ok(turn.brief);
+  await assert.rejects(() => engine.chat(engine.createConversation(), "hi"), /isn't a discussion/);
+});
+
+test("@mentions resolve to the most specific panellist", async () => {
+  const { mentioned } = await import("../src/council/discussion.ts");
+  const members = [
+    { id: "s", label: "Claude Sonnet 5.5", provider: "openrouter" as const, model: "" },
+    { id: "o", label: "Claude Opus 5.5", provider: "openrouter" as const, model: "" },
+    { id: "g", label: "Gemini 4 Argon", provider: "openrouter" as const, model: "" }
+  ];
+  assert.deepEqual(mentioned("@Claude Sonnet 5.5 is this right?", members).map((m) => m.id), ["s"]);
+  assert.deepEqual(mentioned("@Gemini and @Claude Opus, thoughts?", members).map((m) => m.id), ["o", "g"]);
+  assert.deepEqual(mentioned("@Claude what do you think?", members).map((m) => m.id), [], "ambiguous first name matches nobody");
+  assert.deepEqual(mentioned("email me at x@gemini.com", members).map((m) => m.id), [], "not a mention");
+});

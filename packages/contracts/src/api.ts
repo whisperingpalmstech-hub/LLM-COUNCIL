@@ -26,6 +26,7 @@ export interface CreateConversationRequest {
   title?: string;
   /** "auto" classifies the case from its first message. */
   mode?: CaseMode | "auto";
+  kind?: "council" | "chat";
 }
 
 export interface SendMessageRequest {

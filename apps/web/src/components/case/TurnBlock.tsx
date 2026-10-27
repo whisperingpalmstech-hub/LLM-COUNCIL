@@ -24,9 +24,19 @@ export function TurnBlock({
 }) {
   return (
     <section className="flex flex-col gap-5">
-      <UserCase turn={turn} />
-      {turn.clarification && <Intake conversationId={conversationId} turn={turn} />}
-      {turn.clarification?.answer !== undefined || !turn.clarification ? <CouncilProgress turn={turn} onOpenPanel={onOpenPanel} /> : null}
+      {turn.wrapUp ? (
+        <p className="mt-6 flex items-center justify-center gap-2 text-muted-foreground text-xs">
+          <span className="h-px flex-1 bg-border" />
+          {turn.status === "running" ? <span className="live-shine">{turn.council.chairman.label} is wrapping up the discussion…</span> : `Wrapped up by ${turn.council.chairman.label}`}
+          <span className="h-px flex-1 bg-border" />
+        </p>
+      ) : (
+        <>
+          <UserCase turn={turn} />
+          {turn.clarification && <Intake conversationId={conversationId} turn={turn} />}
+          {turn.clarification?.answer !== undefined || !turn.clarification ? <CouncilProgress turn={turn} onOpenPanel={onOpenPanel} /> : null}
+        </>
+      )}
       {turn.brief && <BriefCard conversationId={conversationId} turn={turn} brief={turn.brief} hermesConfigured={hermesConfigured} />}
       {!turn.brief && turn.briefError && (
         <p className="fade-in flex items-start gap-2.5 rounded-2xl bg-warning-surface px-4 py-3 text-sm text-warning-foreground">

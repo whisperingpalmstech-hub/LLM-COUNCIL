@@ -39,7 +39,10 @@ export const api = {
   saveCouncil: (council: CouncilConfig) => request<CouncilConfig>("/api/council", { method: "PUT", body: JSON.stringify(council) }),
   conversations: () => request<ConversationSummary[]>("/api/conversations"),
   conversation: (id: string) => request<Conversation>(`/api/conversations/${id}`),
-  createConversation: (mode: CaseMode | "auto") => post<Conversation>("/api/conversations", { mode }),
+  createConversation: (mode: CaseMode | "auto", kind: "council" | "chat" = "council") => post<Conversation>("/api/conversations", { mode, kind }),
+  chat: (id: string, text: string) => post(`/api/conversations/${id}/chat`, { text, timezone: Intl.DateTimeFormat().resolvedOptions().timeZone }),
+  stopChat: (id: string) => post(`/api/conversations/${id}/chat/stop`),
+  wrapUp: (id: string) => post<{ turnId: string }>(`/api/conversations/${id}/wrap-up`, { timezone: Intl.DateTimeFormat().resolvedOptions().timeZone }),
   updateConversation: (id: string, patch: { title?: string; archived?: boolean; mode?: CaseMode }) =>
     request<Conversation>(`/api/conversations/${id}`, { method: "PATCH", body: JSON.stringify(patch) }),
   send: (id: string, prompt: string, options: { depth?: Depth } = {}) =>

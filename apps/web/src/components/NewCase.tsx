@@ -1,4 +1,4 @@
-import { Crown, Menu, Wand2 } from "lucide-react";
+import { Crown, Menu, MessagesSquare, Scale as Gavel, Wand2 } from "lucide-react";
 import { useEffect, useState } from "react";
 import { CASE_MODES, type CaseMode, type CouncilConfig, type CouncilMember, type Depth, type ServerInfo } from "@synod/contracts";
 import { api, fileToBase64 } from "~/lib/api";
@@ -15,6 +15,7 @@ export function NewCase({ info, onOpenSidebar }: { info: ServerInfo | null; onOp
   const auth = useAuth();
   const [mode, setMode] = useState<CaseMode | "auto">(() => (localStorage.getItem("synod.mode") as CaseMode | "auto") || "auto");
   const [depth, setDepth] = useState<Depth | null>(null);
+  const [kind, setKind] = useState<"council" | "chat">(() => (localStorage.getItem("synod.kind") as "council" | "chat") || "council");
   const [recipes, setRecipes] = useState<Awaited<ReturnType<typeof api.recipes>> | null>(null);
   const [text, setText] = useState("");
   const [files, setFiles] = useState<File[]>([]);
@@ -44,9 +45,13 @@ export function NewCase({ info, onOpenSidebar }: { info: ServerInfo | null; onOp
   const start = async () => {
     setSending(true);
     try {
-      const conversation = await api.createConversation(mode);
-      for (const file of files) await api.upload(conversation.id, { name: file.name, mimeType: file.type, data: await fileToBase64(file) });
-      await api.send(conversation.id, text, { depth: effectiveDepth });
+      const conversation = await api.createConversation(mode, kind);
+      if (kind === "chat") {
+        await api.chat(conversation.id, text);
+      } else {
+        for (const file of files) await api.upload(conversation.id, { name: file.name, mimeType: file.type, data: await fileToBase64(file) });
+        await api.send(conversation.id, text, { depth: effectiveDepth });
+      }
       navigate(`/c/${conversation.id}`);
     } finally {
       setSending(false);
@@ -79,11 +84,39 @@ export function NewCase({ info, onOpenSidebar }: { info: ServerInfo | null; onOp
           </div>
         )}
 
-        <h1 className="mt-7 text-center font-semibold text-[1.9rem] tracking-[-0.025em] sm:text-[2.25rem]">{greetName ? `What's the case, ${greetName}?` : "What's the case?"}</h1>
+        <div className="mt-7 flex justify-center">
+          <div className="inline-flex rounded-full border bg-card p-0.5 text-sm shadow-[0_1px_2px_rgb(0_0_0/4%)]" role="radiogroup" aria-label="How to work">
+            {(
+              [
+                ["council", "Get an opinion", Gavel],
+                ["chat", "Discuss", MessagesSquare]
+              ] as const
+            ).map(([value, label, Icon]) => (
+              <button
+                key={value}
+                type="button"
+                role="radio"
+                aria-checked={kind === value}
+                onClick={() => {
+                  setKind(value);
+                  localStorage.setItem("synod.kind", value);
+                }}
+                className={cn("flex h-8 cursor-pointer items-center gap-1.5 rounded-full px-3.5 font-medium transition-[background-color,color] duration-150", kind === value ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:text-foreground")}
+              >
+                <Icon className="size-3.5" />
+                {label}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        <h1 className="mt-5 text-center font-semibold text-[1.9rem] tracking-[-0.025em] sm:text-[2.25rem]">{greetName ? `What's the case, ${greetName}?` : "What's the case?"}</h1>
         <p className="mx-auto mt-2 max-w-md text-balance text-center text-muted-foreground">
-          {seats
-            ? `${seats.members.length} leading models will work it independently, review each other blind, and agree on a brief.`
-            : "The council will work it independently, review each other blind, and agree on a brief."}
+          {kind === "chat"
+            ? "Talk it through with the panel. A moderator lets the right models answer, and they'll challenge each other."
+            : seats
+              ? `${seats.members.length} leading models will work it independently, review each other blind, and agree on a brief.`
+              : "The council will work it independently, review each other blind, and agree on a brief."}
         </p>
 
         <div className="mt-8 flex justify-center">
@@ -124,7 +157,7 @@ export function NewCase({ info, onOpenSidebar }: { info: ServerInfo | null; onOp
             onAttach={(added) => setFiles((cur) => [...cur, ...added])}
             onRemoveFile={(id) => setFiles((cur) => cur.filter((_, i) => String(i) !== id))}
             voice={Boolean(info?.voice.available)}
-            footer={<DepthPicker value={effectiveDepth} onChange={setDepth} />}
+            footer={kind === "council" ? <DepthPicker value={effectiveDepth} onChange={setDepth} /> : undefined}
             onSend={start}
           />
           <div className="mt-3 flex flex-wrap items-center justify-between gap-2 px-2 text-muted-foreground text-xs">

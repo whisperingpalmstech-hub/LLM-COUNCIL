@@ -10,6 +10,7 @@ import {
   type CaseContext,
   type CaseMode,
   type CouncilConfig,
+  type ChatMessage,
   type CouncilMember,
   type Depth,
   type Stage1Response,
@@ -25,7 +26,8 @@ import { errorMessage } from "../providers/http.ts";
 import type { ProviderRegistry } from "../providers/registry.ts";
 import type { ImageInput } from "../providers/types.ts";
 import { extractJson, normalizeBrief } from "./brief.ts";
-import { answerSystem, briefPrompt, buildContext, clarifyPrompt, classifyPrompt, questionBlock, revisePrompt, reviewPrompt, synthesisPrompt, type TurnContext } from "./prompts.ts";
+import { chatSystem, chatTurnPrompt, MAX_REPLIES_PER_TURN, mentioned, moderatorPrompt, wrapUpPrompt } from "./discussion.ts";
+import { aboutBlock, answerSystem, briefPrompt, buildContext, clarifyPrompt, classifyPrompt, questionBlock, revisePrompt, reviewPrompt, synthesisPrompt, type TurnContext } from "./prompts.ts";
 import { aggregateRankings, assignLabels, parseRanking } from "./ranking.ts";
 import { CLASSIFIER, RECIPES } from "./recipes.ts";
 
@@ -68,6 +70,8 @@ export interface SendOptions {
 export class CouncilEngine {
   private readonly deps: EngineDeps;
   private readonly running = new Map<string, AbortController>();
+  /** Discussions in progress, by conversation. */
+  private readonly discussions = new Map<string, AbortController>();
 
   constructor(deps: EngineDeps) {
     this.deps = deps;
@@ -107,7 +111,7 @@ export class CouncilEngine {
 
   // ---- commands --------------------------------------------------------------
 
-  createConversation(title?: string, mode: CaseMode | "auto" = "general", ownerId?: string): string {
+  createConversation(title?: string, mode: CaseMode | "auto" = "general", ownerId?: string, kind: "council" | "chat" = "council"): string {
     const conversationId = crypto.randomUUID();
     const auto = mode === "auto";
     this.deps.store.append({
@@ -116,6 +120,7 @@ export class CouncilEngine {
       title: cleanTitle(title) || "New conversation",
       mode: auto ? "general" : validMode(mode),
       ...(auto ? { autoMode: true } : {}),
+      ...(kind === "chat" ? { kind } : {}),
       ...(ownerId ? { ownerId } : {})
     });
     return conversationId;
@@ -154,6 +159,133 @@ export class CouncilEngine {
     this.deps.store.append({ type: "turn.started", conversationId, turnId, prompt: text, mode: conversation.mode, council, rounds: DEPTH_ROUNDS[depth], context });
     this.launch(conversationId, turnId);
     return turnId;
+  }
+
+  // ---- Discuss mode -----------------------------------------------------------
+
+  /** Post a user message to a group discussion; starts the moderated replies if none are running. */
+  async chat(conversationId: string, text: string, options: SendOptions = {}): Promise<void> {
+    let conversation = this.deps.store.require(conversationId);
+    if (conversation.kind !== "chat") throw badRequest("This case isn't a discussion.");
+    const body = text.trim();
+    if (!body) throw badRequest("Message is required.");
+    if (body.length > 20_000) throw badRequest("Message must be 20,000 characters or fewer.");
+    if (conversation.autoMode && !conversation.chat.length) {
+      this.setMode(conversationId, await this.classify(body));
+      conversation = this.deps.store.require(conversationId);
+    }
+    if (!conversation.chat.length && conversation.title === "New conversation") {
+      this.deps.store.append({ type: "conversation.renamed", conversationId, title: cleanTitle(body) });
+    }
+    const message: ChatMessage = { id: crypto.randomUUID(), author: { kind: "user" }, text: body, at: new Date().toISOString() };
+    this.deps.store.append({ type: "chat.message", conversationId, message });
+    // Already discussing: the running loop sees the new message and lets the panel respond to it.
+    if (!this.discussions.has(conversationId)) this.startDiscussion(conversationId, options);
+  }
+
+  stopDiscussion(conversationId: string): void {
+    this.discussions.get(conversationId)?.abort();
+  }
+
+  /** Turn a discussion into the usual synthesis + brief + document. */
+  async wrapUp(conversationId: string, options: SendOptions = {}): Promise<string> {
+    const conversation = this.deps.store.require(conversationId);
+    if (conversation.kind !== "chat") throw badRequest("Only a discussion can be wrapped up.");
+    if (!conversation.chat.some((m) => m.author.kind === "model")) throw badRequest("Discuss something first, then wrap up.");
+    if (this.discussions.has(conversationId) || conversation.turns.at(-1)?.status === "running") {
+      throw Object.assign(new Error("Wait for the panel to finish, then wrap up."), { status: 409 });
+    }
+    const council = { ...this.resolve(this.council(options.userId), conversation.mode), depth: "quick" as const };
+    const context: CaseContext = { date: todayIn(options.timezone), ...(options.timezone ? { timezone: options.timezone } : {}), ...(options.profile ? { profile: options.profile } : {}) };
+    const turnId = crypto.randomUUID();
+    this.deps.store.append({ type: "turn.started", conversationId, turnId, prompt: "Wrap up the discussion", mode: conversation.mode, council, rounds: 1, context, wrapUp: true });
+    this.launch(conversationId, turnId);
+    return turnId;
+  }
+
+  private startDiscussion(conversationId: string, options: SendOptions): void {
+    const controller = new AbortController();
+    this.discussions.set(conversationId, controller);
+    this.deps.store.append({ type: "chat.busy", conversationId, busy: true });
+    void this.discuss(conversationId, options, controller.signal)
+      .catch((error) => {
+        if (!controller.signal.aborted) console.error(`[discuss] ${conversationId} failed`, error);
+      })
+      .finally(() => {
+        this.discussions.delete(conversationId);
+        this.deps.store.append({ type: "chat.busy", conversationId, busy: false });
+      });
+  }
+
+  private async discuss(conversationId: string, options: SendOptions, signal: AbortSignal): Promise<void> {
+    const { store, providers } = this.deps;
+    const conversation = store.require(conversationId);
+    const council = this.resolve(this.council(options.userId), conversation.mode);
+    const members = council.members;
+    const about = aboutBlock({ date: todayIn(options.timezone), ...(options.timezone ? { timezone: options.timezone } : {}), ...(options.profile ? { profile: options.profile } : {}) });
+    const moderator = this.autoAvailable() ? CLASSIFIER : council.chairman;
+    const userCount = () => store.require(conversationId).chat.filter((m) => m.author.kind === "user").length;
+    let seenUsers = userCount();
+    let replies = 0;
+
+    while (!signal.aborted) {
+      const chat = store.require(conversationId).chat;
+      const last = chat.at(-1);
+      // Who speaks: explicit @mentions win; otherwise the moderator decides.
+      let speakers: CouncilMember[] = [];
+      let reason = "";
+      const tagged = last?.author.kind === "user" ? mentioned(last.text, members) : [];
+      if (tagged.length) {
+        speakers = tagged;
+        reason = "You asked them directly";
+      } else {
+        try {
+          const reply = await providers.complete(moderator, { purpose: "moderate", json: true, messages: [{ role: "user", content: moderatorPrompt(about, members, chat, replies) }], signal });
+          const parsed = extractJson(reply) as { speakers?: unknown; reason?: unknown };
+          const ids = Array.isArray(parsed.speakers) ? parsed.speakers.map(String) : [];
+          speakers = ids.map((id) => members.find((m) => m.id === id)).filter((m): m is CouncilMember => Boolean(m));
+          speakers = [...new Set(speakers)].slice(0, replies === 0 ? 3 : 1);
+          reason = typeof parsed.reason === "string" ? parsed.reason.slice(0, 120) : "";
+        } catch (error) {
+          if (signal.aborted) return;
+          console.warn("[discuss] moderator failed:", errorMessage(error));
+          // Without a moderator, let the first two panellists answer the user, then stop.
+          speakers = replies === 0 ? members.slice(0, 2) : [];
+          reason = "";
+        }
+      }
+      if (!speakers.length) break;
+      store.append({ type: "chat.moderated", conversationId, note: { id: crypto.randomUUID(), speakers: speakers.map((s) => s.id), reason, at: new Date().toISOString() } });
+
+      for (const speaker of speakers) {
+        if (signal.aborted || replies >= MAX_REPLIES_PER_TURN) break;
+        const draft = throttle((text: string) => store.publishDraft({ type: "draft", conversationId, turnId: "chat", key: `chat:${speaker.id}`, text }), 120);
+        const latest = store.require(conversationId).chat;
+        let message: ChatMessage;
+        try {
+          const text = await providers.complete(speaker, {
+            purpose: "chat",
+            system: chatSystem(speaker, members.filter((m) => m.id !== speaker.id), conversation.mode, about),
+            messages: [{ role: "user", content: chatTurnPrompt(latest, speaker) }],
+            signal,
+            onText: draft
+          });
+          message = { id: crypto.randomUUID(), author: { kind: "model", memberId: speaker.id, label: speaker.label, provider: speaker.provider, model: speaker.model }, text, at: new Date().toISOString() };
+        } catch (error) {
+          if (signal.aborted) return;
+          message = { id: crypto.randomUUID(), author: { kind: "model", memberId: speaker.id, label: speaker.label, provider: speaker.provider, model: speaker.model }, text: "", error: errorMessage(error), at: new Date().toISOString() };
+        }
+        store.append({ type: "chat.message", conversationId, message });
+        replies++;
+      }
+      // The user jumped in while the panel was talking: start a fresh round for their message.
+      if (userCount() > seenUsers) {
+        seenUsers = userCount();
+        replies = 0;
+        continue;
+      }
+      if (replies >= MAX_REPLIES_PER_TURN) break;
+    }
   }
 
   answerClarification(conversationId: string, answer: string): void {
@@ -222,6 +354,7 @@ export class CouncilEngine {
     };
     const draft = (key: string) => throttle((text: string) => store.publishDraft({ type: "draft", conversationId, turnId, key, text }), 120);
     let turn = this.turn(conversationId, turnId);
+    if (turn.wrapUp) return this.runWrapUp(conversationId, turnId, signal);
     const { members, chairman } = turn.council;
     const mode = turn.mode;
     const images = await this.images(turn);
@@ -381,6 +514,45 @@ export class CouncilEngine {
         console.warn("[obsidian] write failed:", errorMessage(error))
       );
     }
+  }
+
+  /** Wrap up a discussion: the chairman's conclusion and a brief, from the chat transcript. */
+  private async runWrapUp(conversationId: string, turnId: string, signal: AbortSignal): Promise<void> {
+    const { store, providers } = this.deps;
+    const emit = store.append.bind(store);
+    const turn = this.turn(conversationId, turnId);
+    const conversation = store.require(conversationId);
+    const { chairman, members } = turn.council;
+    const about = aboutBlock(turn.context);
+    emit({ type: "turn.stage_started", conversationId, turnId, stage: "stage3" });
+    // Each panellist's contributions, as the "answers" the brief is built from.
+    const answers: Stage1Response[] = members
+      .map((m) => ({ m, text: conversation.chat.filter((c) => c.author.kind === "model" && c.author.memberId === m.id && !c.error).map((c) => c.text).join("\n\n") }))
+      .filter((x) => x.text)
+      .map((x) => ({ round: 1, memberId: x.m.id, label: x.m.label, model: modelName(x.m), text: x.text, ms: 0 }));
+    const ctx = { ...buildContext(turn, []), prompt: `Group discussion (user messages included):\n${conversation.chat.map((c) => `${c.author.kind === "user" ? "User" : c.author.label}: ${c.text}`).join("\n\n").slice(-30_000)}` };
+    const draft = throttle((text: string) => store.publishDraft({ type: "draft", conversationId, turnId, key: "synthesis", text }), 120);
+
+    const synthesis = (async () => {
+      try {
+        const text = await providers.complete(chairman, { purpose: "synthesis", messages: [{ role: "user", content: wrapUpPrompt(about, conversation.chat) }], signal, onText: draft });
+        if (!signal.aborted) emit({ type: "turn.synthesis_completed", conversationId, turnId, synthesis: { memberId: chairman.id, label: chairman.label, model: modelName(chairman), text } });
+      } catch (error) {
+        if (!signal.aborted) throw error;
+      }
+    })();
+    const brief = (async () => {
+      try {
+        const reply = await providers.complete(chairman, { purpose: "brief", json: true, messages: [{ role: "user", content: briefPrompt(ctx, turn.mode, answers, [], "") }], signal });
+        const version = store.require(conversationId).turns.filter((t) => t.brief).length + 1;
+        if (!signal.aborted) emit({ type: "turn.brief_generated", conversationId, turnId, brief: normalizeBrief(extractJson(reply), turn.mode, version, null) });
+      } catch (error) {
+        if (signal.aborted) return;
+        emit({ type: "turn.brief_failed", conversationId, turnId, error: friendlyProviderError(error) });
+      }
+    })();
+    await Promise.all([synthesis, brief]);
+    if (!signal.aborted) emit({ type: "turn.completed", conversationId, turnId });
   }
 
   /** Image attachments, read once per turn and passed to models that can see them. */
