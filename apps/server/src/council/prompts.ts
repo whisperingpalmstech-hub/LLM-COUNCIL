@@ -40,8 +40,10 @@ export function questionBlock(ctx: TurnContext): string {
 export function clarifyPrompt(ctx: TurnContext): string {
   return `${questionBlock(ctx)}
 
-Before a council of advisers answers this, decide whether ONE clarifying question is essential.
-Ask only if a missing fact would materially change the answer and cannot reasonably be assumed. Otherwise do not ask.
+Before a council of advisers answers this, decide whether to ask the user ONE clarifying question.
+Ask when the best answer depends on the user's own situation (who they are, their goals, constraints, budget, timeline, stage, or what success means) and the message and earlier conversation do not say. Advice built on guessed context is generic; one good question makes it specific.
+Do not ask for factual or general-knowledge questions, when the user already gave enough context, or merely to confirm something obvious.
+If you ask, make it a single question that gathers the most decision-relevant context at once.
 Return JSON: {"needed": boolean, "question": string}`;
 }
 
@@ -124,7 +126,10 @@ function historyBlock(turns: Turn[]): string {
   return turns
     .filter((t) => t.status === "completed" && t.synthesis)
     .slice(-4)
-    .map((t) => `User: ${t.prompt}\nCouncil: ${truncate(t.synthesis?.text ?? "", 1500)}`)
+    .map((t) => {
+      const clarified = t.clarification?.answer ? `\nClarifying question: ${t.clarification.question}\nUser: ${t.clarification.answer}` : "";
+      return `User: ${t.prompt}${clarified}\nCouncil: ${truncate(t.synthesis?.text ?? "", 1500)}`;
+    })
     .join("\n\n");
 }
 

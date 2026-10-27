@@ -154,8 +154,9 @@ export function createApp({ config, store, engine, providers, search, transcribe
 
   app.use((error: Error & { status?: number; type?: string }, _req: Request, res: Response, _next: NextFunction) => {
     const status = error.status ?? (error.type === "entity.too.large" ? 413 : 500);
-    if (status >= 500) console.error("[http]", error);
-    res.status(status).json({ error: status >= 500 ? "Internal server error." : error.message });
+    // Errors with an explicit status are deliberate and safe to show; anything else is a bug.
+    if (!error.status) console.error("[http]", error);
+    res.status(status).json({ error: error.status ? error.message : "Internal server error." });
   });
 
   return app;

@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { applyEvent, emptyConversation, projectConversation, type ConversationEvent, type CouncilConfig } from "../src/index.ts";
+import { applyEvent, emptyConversation, type ConversationEvent, type CouncilConfig } from "../src/index.ts";
 
 const council: CouncilConfig = {
   members: [{ id: "a", label: "A", provider: "mock", model: "" }],
@@ -17,7 +17,7 @@ test("pending attachments move into the next turn", () => {
     { ...base, seq: 2, type: "attachment.added", attachment: { id: "f", name: "a.txt", mimeType: "text/plain", size: 1, url: "/u", source: "upload" } },
     { ...base, seq: 3, type: "turn.started", turnId: "t", prompt: "hi", council }
   ];
-  const state = projectConversation("c", events);
+  const state = events.reduce(applyEvent, emptyConversation("c"));
   assert.equal(state.pendingAttachments.length, 0);
   assert.equal(state.turns[0].attachments[0].id, "f");
 });

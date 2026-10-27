@@ -18,6 +18,9 @@ export interface EngineDeps {
   settings: Settings;
   search: WebSearch;
   obsidianVaultPath: string | null;
+  env?: Record<string, string | undefined>;
+  /** Minimum time the last straggler gets after everyone else has finished a stage. */
+  stragglerGraceMs?: number;
 }
 
 /**
@@ -43,8 +46,8 @@ export class CouncilEngine {
   council(): CouncilConfig {
     const saved = this.deps.settings.get<CouncilConfig>(COUNCIL_SETTING);
     if (saved?.members?.length) return saved;
-    const members = this.deps.providers.defaultMembers();
-    return { members, chairman: members[0], clarify: true, executionPlan: true, webSearch: Boolean(this.deps.search.provider()) };
+    const { members, chairman } = this.deps.providers.defaultCouncil(this.deps.env);
+    return { members, chairman, clarify: true, executionPlan: true, webSearch: Boolean(this.deps.search.provider()) };
   }
 
   saveCouncil(input: CouncilConfig): CouncilConfig {
@@ -173,18 +176,21 @@ export class CouncilEngine {
     // 1. Independent answers.
     stage("stage1");
     const question = questionBlock(context());
-    await Promise.all(
-      members.map(async (member) => {
+    await withStragglerCutoff(
+      members,
+      signal,
+      this.deps.stragglerGraceMs,
+      async (member, memberSignal) => {
         const started = Date.now();
         let response: Stage1Response;
         try {
-          const text = await providers.complete(member, { purpose: "answer", system: ANSWER_SYSTEM, messages: [{ role: "user", content: question }], signal });
+          const text = await providers.complete(member, { purpose: "answer", system: ANSWER_SYSTEM, messages: [{ role: "user", content: question }], signal: memberSignal });
           response = { memberId: member.id, label: member.label, model: modelName(member), text, ms: Date.now() - started };
         } catch (error) {
-          response = { memberId: member.id, label: member.label, model: modelName(member), text: "", error: errorMessage(error), ms: Date.now() - started };
+          response = { memberId: member.id, label: member.label, model: modelName(member), text: "", error: memberError(error, memberSignal), ms: Date.now() - started };
         }
         if (!signal.aborted) emit({ type: "turn.stage1_response", conversationId, turnId, response });
-      })
+      }
     );
     if (signal.aborted) return;
     turn = this.turn(conversationId, turnId);
@@ -198,17 +204,20 @@ export class CouncilEngine {
       const prompt = reviewPrompt(context(), labelled.map((l) => ({ label: l.label, text: l.response.text })));
       const validLabels = labelled.map((l) => l.label);
       const reviewers = members.filter((m) => answered.some((r) => r.memberId === m.id));
-      await Promise.all(
-        reviewers.map(async (member) => {
+      await withStragglerCutoff(
+        reviewers,
+        signal,
+        this.deps.stragglerGraceMs,
+        async (member, memberSignal) => {
           let review: Stage2Review;
           try {
-            const text = await providers.complete(member, { purpose: "review", messages: [{ role: "user", content: prompt }], signal });
+            const text = await providers.complete(member, { purpose: "review", messages: [{ role: "user", content: prompt }], signal: memberSignal });
             review = { memberId: member.id, label: member.label, text, ranking: parseRanking(text, validLabels) };
           } catch (error) {
-            review = { memberId: member.id, label: member.label, text: "", ranking: [], error: errorMessage(error) };
+            review = { memberId: member.id, label: member.label, text: "", ranking: [], error: memberError(error, memberSignal) };
           }
           if (!signal.aborted) emit({ type: "turn.stage2_review", conversationId, turnId, review });
-        })
+        }
       );
       if (signal.aborted) return;
       turn = this.turn(conversationId, turnId);
@@ -276,6 +285,44 @@ export class CouncilEngine {
       return null;
     }
   }
+}
+
+/**
+ * Run one task per member in parallel. Once all but one have finished, the last
+ * straggler gets a grace period (half the elapsed time, at least 20 s) and is then
+ * cancelled, so one slow model can't hold the whole council hostage.
+ */
+async function withStragglerCutoff<T extends { id: string }>(
+  items: T[],
+  signal: AbortSignal,
+  minGraceMs = 20_000,
+  task: (item: T, memberSignal: AbortSignal) => Promise<void>
+): Promise<void> {
+  const started = Date.now();
+  const controllers = items.map(() => new AbortController());
+  let done = 0;
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  await Promise.all(
+    items.map(async (item, i) => {
+      await task(item, AbortSignal.any([signal, controllers[i].signal]));
+      done++;
+      if (items.length > 2 && done === items.length - 1) {
+        const grace = Math.max(minGraceMs, (Date.now() - started) / 2);
+        timer = setTimeout(() => controllers.forEach((c) => c.abort(new StragglerCutoff(grace))), grace);
+      }
+    })
+  );
+  clearTimeout(timer);
+}
+
+class StragglerCutoff extends Error {
+  constructor(graceMs: number) {
+    super(`Too slow: the council moved on ${Math.round(graceMs / 1000)}s after the others finished.`);
+  }
+}
+
+function memberError(error: unknown, memberSignal: AbortSignal): string {
+  return memberSignal.reason instanceof StragglerCutoff ? memberSignal.reason.message : errorMessage(error);
 }
 
 function validateCouncil(input: CouncilConfig): CouncilConfig {

@@ -35,7 +35,7 @@ npm run dev
 
 ## Providers
 
-OpenAI, Anthropic, Gemini, DeepSeek, OpenRouter, SiliconFlow, Ollama, RouteLLM and AnythingLLM workspaces. Any member can use any configured provider and model. For AnythingLLM, the "model" is the workspace slug. OpenRouter alone is enough to seat models from every major lab.
+OpenAI, Anthropic, Gemini, DeepSeek, OpenRouter, SiliconFlow, Ollama, RouteLLM and AnythingLLM workspaces. Any member can use any configured provider and model. For AnythingLLM, the "model" is the workspace slug. With only `OPENROUTER_API_KEY`, the default council is GPT-6.1 Terra, Claude Sonnet 5.5, Gemini 4 Argon and Grok 4.7, with Claude Sonnet 5.5 as chairman. Override it with `OPENROUTER_COUNCIL_MODELS` and `OPENROUTER_CHAIRMAN_MODEL`, or in the UI.
 
 ## Features
 
@@ -46,7 +46,7 @@ OpenAI, Anthropic, Gemini, DeepSeek, OpenRouter, SiliconFlow, Ollama, RouteLLM a
 | Web search shared with the council | `TAVILY_API_KEY` or `PERPLEXITY_API_KEY`, then enable it in settings |
 | File attachments | 📎 button or paste. Text-like files are shared with the council (up to 20k characters each) |
 | Upload from phone | 📱 button shows a QR code. Set `SYNOD_ACCESS_PASSWORD` first, and `PUBLIC_BASE_URL` when off-LAN |
-| Voice input | Local whisper.cpp (`WHISPER_CPP_BIN`, `WHISPER_MODEL_PATH`, plus ffmpeg), or `OPENAI_API_KEY` |
+| Voice input | `OPENROUTER_API_KEY` (cheap `google/gemini-2.5-flash-lite`, with fallbacks), or local whisper.cpp, or `OPENAI_API_KEY` |
 | Obsidian notes | `OBSIDIAN_VAULT_PATH`: every completed answer is written as a note |
 | Hermes hand-off | `HERMES_WEBHOOK_URL`. Simulated when unset, and always needs a confirm click |
 | Password protection | `SYNOD_ACCESS_PASSWORD` (HTTP Basic auth, covers the WebSocket too) |

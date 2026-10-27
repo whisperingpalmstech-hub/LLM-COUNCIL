@@ -40,7 +40,6 @@ class ClientStore {
     };
     socket.onmessage = (message) => {
       const push = JSON.parse(String(message.data)) as ServerPush;
-      if (push.type !== "event") return;
       const { event } = push;
       const current = this.conversations.get(event.conversationId);
       if (current) {

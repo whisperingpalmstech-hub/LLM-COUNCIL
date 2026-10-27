@@ -71,16 +71,6 @@ export class EventStore {
       .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
   }
 
-  eventsSince(seq: number): ConversationEvent[] {
-    const rows = this.db.prepare("SELECT * FROM events WHERE seq > ? ORDER BY seq").all(seq) as unknown as EventRow[];
-    return rows.map(fromRow);
-  }
-
-  latestSeq(): number {
-    const row = this.db.prepare("SELECT max(seq) AS seq FROM events").get() as { seq: number | null };
-    return Number(row.seq ?? 0);
-  }
-
   private project(event: ConversationEvent): void {
     const current = this.projections.get(event.conversationId) ?? emptyConversation(event.conversationId);
     this.projections.set(event.conversationId, applyEvent(current, event));

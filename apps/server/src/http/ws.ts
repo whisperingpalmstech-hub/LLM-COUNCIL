@@ -1,5 +1,5 @@
 import type { Server } from "node:http";
-import { WebSocketServer, type WebSocket } from "ws";
+import { WebSocketServer } from "ws";
 import type { ServerPush } from "@synod/contracts";
 import type { Config } from "../config.ts";
 import type { EventStore } from "../events/store.ts";
@@ -21,10 +21,6 @@ export function attachWebSocket(server: Server, store: EventStore, config: Confi
     wss.handleUpgrade(req, socket, head, (ws) => wss.emit("connection", ws, req));
   });
 
-  wss.on("connection", (ws: WebSocket) => {
-    send(ws, { type: "hello", latestSeq: store.latestSeq() });
-  });
-
   const unsubscribe = store.subscribe((event) => {
     const message = JSON.stringify({ type: "event", event } satisfies ServerPush);
     for (const client of wss.clients) if (client.readyState === client.OPEN) client.send(message);
@@ -35,8 +31,4 @@ export function attachWebSocket(server: Server, store: EventStore, config: Confi
   const ping = setInterval(() => wss.clients.forEach((c) => c.ping()), 30_000);
   ping.unref();
   return wss;
-}
-
-function send(ws: WebSocket, message: ServerPush): void {
-  ws.send(JSON.stringify(message));
 }

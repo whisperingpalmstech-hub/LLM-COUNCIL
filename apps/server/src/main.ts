@@ -18,7 +18,7 @@ export function createServer(config: Config) {
   const store = new EventStore(db);
   const providers = ProviderRegistry.fromConfig(config);
   const search = new WebSearch(config.env);
-  const engine = new CouncilEngine({ store, providers, settings: new Settings(db), search, obsidianVaultPath: config.obsidianVaultPath });
+  const engine = new CouncilEngine({ store, providers, settings: new Settings(db), search, obsidianVaultPath: config.obsidianVaultPath, env: config.env });
   const app = createApp({ config, store, engine, providers, search, transcriber: new Transcriber(config.env) });
   const server = config.tls
     ? https.createServer({ cert: fs.readFileSync(config.tls.certPath), key: fs.readFileSync(config.tls.keyPath) }, app)

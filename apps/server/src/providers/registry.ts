@@ -22,13 +22,13 @@ export class ProviderRegistry {
     return new ProviderRegistry(
       [
         new MockProvider({ delayMs: Number(env.MOCK_DELAY_MS) || 0 }),
-        new OpenAiCompatibleProvider({ id: "openai", baseUrl: env.OPENAI_BASE_URL || "https://api.openai.com/v1", apiKey: env.OPENAI_API_KEY, defaultModel: env.OPENAI_MODEL || "gpt-4.1-mini", timeoutMs }),
-        new OpenAiCompatibleProvider({ id: "deepseek", baseUrl: "https://api.deepseek.com", apiKey: env.DEEPSEEK_API_KEY, defaultModel: env.DEEPSEEK_MODEL || "deepseek-chat", timeoutMs }),
+        new OpenAiCompatibleProvider({ id: "openai", baseUrl: env.OPENAI_BASE_URL || "https://api.openai.com/v1", apiKey: env.OPENAI_API_KEY, defaultModel: env.OPENAI_MODEL || "gpt-6.1-terra", timeoutMs }),
+        new OpenAiCompatibleProvider({ id: "deepseek", baseUrl: "https://api.deepseek.com", apiKey: env.DEEPSEEK_API_KEY, defaultModel: env.DEEPSEEK_MODEL || "deepseek-v4-flash", timeoutMs }),
         new OpenAiCompatibleProvider({
           id: "openrouter",
           baseUrl: "https://openrouter.ai/api/v1",
           apiKey: env.OPENROUTER_API_KEY,
-          defaultModel: env.OPENROUTER_MODEL || "openai/gpt-4.1-mini",
+          defaultModel: env.OPENROUTER_MODEL || DEFAULT_OPENROUTER_CHAIRMAN,
           extraHeaders: { "HTTP-Referer": config.publicBaseUrl || "http://localhost", "X-Title": "Synod" },
           timeoutMs
         }),
@@ -52,7 +52,7 @@ export class ProviderRegistry {
           timeoutMs
         }),
         new AnthropicProvider({ apiKey: env.ANTHROPIC_API_KEY, model: env.ANTHROPIC_MODEL || "claude-sonnet-5-5", maxTokens: Number(env.ANTHROPIC_MAX_TOKENS) || 4096, timeoutMs }),
-        new GeminiProvider({ apiKey: env.GEMINI_API_KEY, model: env.GEMINI_MODEL || "gemini-2.5-flash", timeoutMs }),
+        new GeminiProvider({ apiKey: env.GEMINI_API_KEY, model: env.GEMINI_MODEL || "gemini-3.8-flash", timeoutMs }),
         new AnythingLlmProvider({ baseUrl: env.ANYTHINGLLM_BASE_URL || "http://localhost:3001", apiKey: env.ANYTHINGLLM_API_KEY, defaultWorkspace: env.ANYTHINGLLM_WORKSPACE_DEFAULT || "synod", timeoutMs })
       ],
       { maxRetries: config.maxRetries }
@@ -86,21 +86,45 @@ export class ProviderRegistry {
     }
   }
 
-  /** A sensible starting council from whatever is configured; falls back to mock seats. */
-  defaultMembers(): CouncilMember[] {
-    const preferred: ProviderId[] = ["openai", "anthropic", "gemini", "deepseek", "openrouter", "siliconflow", "ollama", "anythingllm"];
-    const members = preferred
+  /**
+   * Starting council from whatever is configured. OpenRouter alone seats models
+   * from several labs (Karpathy-style); otherwise one seat per direct provider;
+   * with nothing configured, a mock council.
+   */
+  defaultCouncil(env: Record<string, string | undefined> = {}): { members: CouncilMember[]; chairman: CouncilMember } {
+    const openrouter = this.providers.get("openrouter");
+    if (openrouter?.configured()) {
+      const models = list(env.OPENROUTER_COUNCIL_MODELS, DEFAULT_OPENROUTER_COUNCIL);
+      const members = models.slice(0, 8).map((model) => orMember(model));
+      return { members, chairman: orMember(env.OPENROUTER_CHAIRMAN_MODEL || DEFAULT_OPENROUTER_CHAIRMAN, "chairman") };
+    }
+    const preferred: ProviderId[] = ["openai", "anthropic", "gemini", "deepseek", "siliconflow", "ollama", "anythingllm"];
+    const direct = preferred
       .map((id) => this.providers.get(id))
       .filter((p): p is Provider => Boolean(p?.configured()))
       .map((p): CouncilMember => ({ id: p.id, label: label(p.id), provider: p.id, model: p.defaultModel() }));
-    if (members.length >= 2) return members.slice(0, 4);
     const mocks: CouncilMember[] = [
       { id: "mock-a", label: "Mock Analyst", provider: "mock", model: "mock-analyst" },
       { id: "mock-b", label: "Mock Skeptic", provider: "mock", model: "mock-skeptic" },
       { id: "mock-c", label: "Mock Strategist", provider: "mock", model: "mock-strategist" }
     ];
-    return [...members, ...mocks].slice(0, 3);
+    const members = direct.length >= 2 ? direct.slice(0, 4) : [...direct, ...mocks].slice(0, 3);
+    return { members, chairman: members[0] };
   }
+}
+
+/** Latest flagship from each lab, as of October 2026. Override with OPENROUTER_COUNCIL_MODELS. */
+export const DEFAULT_OPENROUTER_COUNCIL = ["openai/gpt-6.1-terra", "anthropic/claude-sonnet-5.5", "google/gemini-4-argon", "x-ai/grok-4.7"];
+export const DEFAULT_OPENROUTER_CHAIRMAN = "anthropic/claude-sonnet-5.5";
+
+function orMember(model: string, id = model): CouncilMember {
+  const name = model.split("/").pop() ?? model;
+  return { id: id.replace(/[^\w.-]/g, "-"), label: id === "chairman" ? `Chairman (${name})` : name, provider: "openrouter", model };
+}
+
+function list(value: string | undefined, fallback: string[]): string[] {
+  const items = String(value ?? "").split(",").map((s) => s.trim()).filter(Boolean);
+  return items.length ? items : fallback;
 }
 
 function label(id: ProviderId): string {

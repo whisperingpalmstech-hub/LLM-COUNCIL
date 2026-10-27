@@ -36,14 +36,12 @@ export type ConversationEvent =
   | E<"turn.completed", { turnId: string }>
   | E<"turn.failed", { turnId: string; error: string }>;
 
-export type ConversationEventType = ConversationEvent["type"];
-
 /** Distributive Omit so each union member keeps its own payload. */
 export type DistributiveOmit<T, K extends PropertyKey> = T extends unknown ? Omit<T, K> : never;
 export type NewConversationEvent = DistributiveOmit<ConversationEvent, "seq" | "at">;
 
 /** Messages pushed from server to browser over the WebSocket. */
-export type ServerPush = { type: "event"; event: ConversationEvent } | { type: "hello"; latestSeq: number };
+export type ServerPush = { type: "event"; event: ConversationEvent };
 
 export function emptyConversation(id: string): Conversation {
   return { id, title: "", archived: false, createdAt: "", updatedAt: "", pendingAttachments: [], turns: [], seq: 0 };
@@ -130,8 +128,4 @@ export function applyEvent(state: Conversation, event: ConversationEvent): Conve
       break;
   }
   return next;
-}
-
-export function projectConversation(id: string, events: readonly ConversationEvent[]): Conversation {
-  return events.reduce(applyEvent, emptyConversation(id));
 }

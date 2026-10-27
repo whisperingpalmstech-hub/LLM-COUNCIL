@@ -197,3 +197,56 @@ test("invalid council configurations are rejected", () => {
   assert.throws(() => engine.saveCouncil(council({ members: [] })), /at least one member/);
   assert.throws(() => engine.saveCouncil(council({ members: [{ id: "x", label: "X", provider: "nope" as never, model: "" }] })), /Unknown provider/);
 });
+
+class SlowProvider implements Provider {
+  readonly id = "gemini" as const;
+  configured() {
+    return true;
+  }
+  defaultModel() {
+    return "slow";
+  }
+  complete(request: CompletionRequest): Promise<string> {
+    return new Promise((_resolve, reject) => {
+      request.signal?.addEventListener("abort", () => reject(request.signal?.reason), { once: true });
+    });
+  }
+}
+
+test("a straggler is cut off once the rest of the council has answered", async () => {
+  const db = openDatabase(":memory:");
+  const store = new EventStore(db);
+  const engine = new CouncilEngine({
+    store,
+    providers: new ProviderRegistry([new MockProvider(), new SlowProvider()], { maxRetries: 0 }),
+    settings: new Settings(db),
+    search: new WebSearch({}),
+    obsidianVaultPath: null,
+    stragglerGraceMs: 50
+  });
+  engine.saveCouncil(council({ members: [...council().members, { id: "slow", label: "Slow", provider: "gemini", model: "" }] }));
+  const id = engine.createConversation();
+  const started = Date.now();
+  engine.sendMessage(id, "A long enough question to be answered straight away by the mock council.");
+  await engine.idle();
+  const turn = store.require(id).turns[0];
+  assert.equal(turn.status, "completed", turn.error);
+  assert.match(turn.stage1.find((r) => r.memberId === "slow")?.error ?? "", /Too slow/);
+  assert.equal(turn.stage2.length, 3);
+  assert.ok(Date.now() - started < 2000);
+});
+
+test("follow-up turns see earlier clarifying answers", async () => {
+  const { buildContext } = await import("../src/council/prompts.ts");
+  const { engine, store } = setup();
+  engine.saveCouncil(council({ clarify: true }));
+  const id = engine.createConversation();
+  engine.sendMessage(id, "Should I hire?");
+  await engine.idle();
+  engine.answerClarification(id, "We are a 12-person B2B SaaS company.");
+  await engine.idle();
+  engine.sendMessage(id, "And what about contractors versus full-time employees for this?");
+  await engine.idle();
+  const turns = store.require(id).turns;
+  assert.match(buildContext(turns[1], turns.slice(0, 1)).history, /12-person B2B SaaS/);
+});

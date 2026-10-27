@@ -3,7 +3,7 @@ import fs from "node:fs/promises";
 import path from "node:path";
 import type { Attachment } from "@synod/contracts";
 
-export const MAX_ATTACHMENT_BYTES = 10 * 1024 * 1024;
+const MAX_ATTACHMENT_BYTES = 10 * 1024 * 1024;
 const MAX_EXCERPT_CHARS = 20_000;
 const TEXT_TYPES = /^(text\/|application\/(json|xml|x-yaml|yaml|csv|javascript|typescript|x-sh|sql))/;
 const TEXT_EXTENSIONS = /\.(txt|md|markdown|csv|tsv|json|ya?ml|xml|html?|js|ts|tsx|jsx|py|go|rs|java|rb|sh|sql|toml|ini|log)$/i;

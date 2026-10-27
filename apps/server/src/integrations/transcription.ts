@@ -10,8 +10,10 @@ const run = promisify(execFile);
 export const MAX_AUDIO_BYTES = 16 * 1024 * 1024;
 
 /**
- * Speech-to-text for voice input. Prefers local whisper.cpp (audio never leaves
- * the machine); falls back to OpenAI's transcription API when a key is set.
+ * Speech-to-text for voice input, first available of:
+ *   1. local whisper.cpp (audio never leaves the machine)
+ *   2. OpenRouter with a cheap audio-capable model (default google/gemini-2.5-flash-lite)
+ *   3. OpenAI's transcription API
  * Temp audio goes to the OS temp dir and is always deleted.
  */
 export class Transcriber {
@@ -20,8 +22,9 @@ export class Transcriber {
     this.env = env;
   }
 
-  engine(): "whisper.cpp" | "openai" | null {
+  engine(): "whisper.cpp" | "openrouter" | "openai" | null {
     if (this.localReady()) return "whisper.cpp";
+    if (this.env.OPENROUTER_API_KEY) return "openrouter";
     if (this.env.OPENAI_API_KEY) return "openai";
     return null;
   }
@@ -30,8 +33,9 @@ export class Transcriber {
     if (!audio.length || audio.length > MAX_AUDIO_BYTES) throw Object.assign(new Error("Audio must be between 1 byte and 16 MB."), { status: 413 });
     const engine = this.engine();
     if (engine === "whisper.cpp") return { text: await this.local(audio, mimeType, language), engine };
+    if (engine === "openrouter") return { text: await this.openrouter(audio, mimeType, language), engine: `openrouter/${this.openrouterModel()}` };
     if (engine === "openai") return { text: await this.openai(audio, mimeType, language), engine };
-    throw Object.assign(new Error("Voice input is not configured. Install whisper.cpp or set OPENAI_API_KEY."), { status: 503 });
+    throw Object.assign(new Error("Voice input is not configured. Set OPENROUTER_API_KEY or OPENAI_API_KEY, or install whisper.cpp."), { status: 503 });
   }
 
   private binary(): string {
@@ -69,6 +73,40 @@ export class Transcriber {
     }
   }
 
+  private openrouterModel(): string {
+    return this.env.OPENROUTER_TRANSCRIBE_MODEL || "google/gemini-2.5-flash-lite";
+  }
+
+  private async openrouter(audio: Buffer, mimeType: string, language: string): Promise<string> {
+    const { data, format } = await toMp3(audio, mimeType, this.env.FFMPEG_BIN || "ffmpeg");
+    const hint = language && language !== "auto" ? ` The speaker is most likely using language code "${language}".` : "";
+    const res = await fetch("https://openrouter.ai/api/v1/chat/completions", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Authorization: `Bearer ${this.env.OPENROUTER_API_KEY}`, "X-Title": "Synod" },
+      body: JSON.stringify({
+        model: this.openrouterModel(),
+        // Cheap audio-capable fallbacks if the primary is rate-limited upstream.
+        models: [this.openrouterModel(), "google/gemini-3.1-flash-lite", "mistralai/voxtral-small-24b-2507"],
+        temperature: 0,
+        messages: [
+          {
+            role: "user",
+            content: [
+              { type: "text", text: `Transcribe this audio verbatim, in the language spoken.${hint} Output only the transcript, with no commentary, labels, or quotes. If there is no speech, output nothing.` },
+              { type: "input_audio", input_audio: { data: data.toString("base64"), format } }
+            ]
+          }
+        ]
+      }),
+      signal: AbortSignal.timeout(90_000)
+    });
+    if (!res.ok) throw Object.assign(new Error(`Transcription failed: OpenRouter HTTP ${res.status} ${(await res.text()).slice(0, 200)}`), { status: 502 });
+    const body = (await res.json()) as { choices?: { message?: { content?: string } }[] };
+    const text = String(body.choices?.[0]?.message?.content ?? "").trim();
+    if (!text) throw Object.assign(new Error("No speech detected."), { status: 422 });
+    return text;
+  }
+
   private async openai(audio: Buffer, mimeType: string, language: string): Promise<string> {
     const form = new FormData();
     form.append("file", new Blob([new Uint8Array(audio)], { type: mimeType }), `audio.${extension(mimeType)}`);
@@ -85,6 +123,22 @@ export class Transcriber {
     const text = String(data.text ?? "").trim();
     if (!text) throw Object.assign(new Error("No speech detected."), { status: 422 });
     return text;
+  }
+}
+
+/** Re-encode to small mono mp3 (OpenRouter audio input accepts wav/mp3); passes through if ffmpeg is missing. */
+async function toMp3(audio: Buffer, mimeType: string, ffmpeg: string): Promise<{ data: Buffer; format: string }> {
+  const dir = await fs.promises.mkdtemp(path.join(os.tmpdir(), "synod-voice-"));
+  try {
+    const input = path.join(dir, `input.${extension(mimeType)}`);
+    const output = path.join(dir, "audio.mp3");
+    await fs.promises.writeFile(input, audio, { mode: 0o600 });
+    await run(ffmpeg, ["-hide_banner", "-loglevel", "error", "-y", "-i", input, "-vn", "-ac", "1", "-ar", "16000", "-b:a", "32k", output], { timeout: 60_000 });
+    return { data: await fs.promises.readFile(output), format: "mp3" };
+  } catch {
+    return { data: audio, format: extension(mimeType) };
+  } finally {
+    await fs.promises.rm(dir, { recursive: true, force: true });
   }
 }
 
