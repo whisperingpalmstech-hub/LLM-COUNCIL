@@ -45,3 +45,6 @@ scratch/
 # Runtime data (synod brain vault, anythingllm storage)
 data/anythingllm_storage/
 data/synod-brain-vault/
+
+# Large local model downloads
+/data/whisper-models/
