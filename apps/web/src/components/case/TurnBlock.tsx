@@ -2,6 +2,7 @@ import { ChevronDown, FileText, MessageCircleQuestion, RotateCcw, TriangleAlert 
 import { useState } from "react";
 import type { Turn } from "@synod/contracts";
 import { api } from "~/lib/api";
+import { useDraft } from "~/lib/store";
 import { cn } from "~/lib/utils";
 import { CopyButton, Markdown } from "../Markdown";
 import { Button } from "../ui/button";
@@ -26,7 +27,7 @@ export function TurnBlock({
       {turn.clarification && <Intake conversationId={conversationId} turn={turn} />}
       {turn.clarification?.answer !== undefined || !turn.clarification ? <CouncilProgress turn={turn} onOpenPanel={onOpenPanel} /> : null}
       {turn.brief && <BriefCard conversationId={conversationId} turn={turn} brief={turn.brief} hermesConfigured={hermesConfigured} />}
-      {turn.synthesis && <FullOpinion turn={turn} defaultOpen={!turn.brief && turn.status === "completed"} />}
+      {turn.synthesis ? <FullOpinion turn={turn} defaultOpen={!turn.brief && turn.status === "completed"} /> : turn.status === "running" && <StreamingOpinion turn={turn} />}
       {turn.status === "failed" && (
         <div className="rise-in flex items-start gap-3 rounded-xl border border-error/30 bg-error-surface p-3 text-sm">
           <TriangleAlert className="mt-0.5 size-4 shrink-0 text-error" />
@@ -130,6 +131,23 @@ function Intake({ conversationId, turn }: { conversationId: string; turn: Turn }
             )
           )}
         </div>
+      </div>
+    </div>
+  );
+}
+
+/** The chairman's opinion, rendered as it is written. */
+function StreamingOpinion({ turn }: { turn: Turn }) {
+  const text = useDraft(turn.id, "synthesis");
+  if (!text) return null;
+  return (
+    <div className="rise-in rounded-xl border bg-card">
+      <div className="flex items-center gap-2 px-4 py-3">
+        <span className="live-shine flex-1 font-medium text-sm">Council opinion · writing…</span>
+        <span className="text-muted-foreground text-xs">by {turn.council.chairman.label}</span>
+      </div>
+      <div className="border-t px-5 py-4">
+        <Markdown text={text} />
       </div>
     </div>
   );

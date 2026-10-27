@@ -25,7 +25,14 @@ export function attachWebSocket(server: Server, store: EventStore, config: Confi
     const message = JSON.stringify({ type: "event", event } satisfies ServerPush);
     for (const client of wss.clients) if (client.readyState === client.OPEN) client.send(message);
   });
-  wss.on("close", unsubscribe);
+  const unsubscribeDrafts = store.subscribeDrafts((draft) => {
+    const message = JSON.stringify(draft satisfies ServerPush);
+    for (const client of wss.clients) if (client.readyState === client.OPEN) client.send(message);
+  });
+  wss.on("close", () => {
+    unsubscribe();
+    unsubscribeDrafts();
+  });
 
   // Keep proxies from dropping idle connections.
   const ping = setInterval(() => wss.clients.forEach((c) => c.ping()), 30_000);

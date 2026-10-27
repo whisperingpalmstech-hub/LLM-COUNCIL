@@ -1,4 +1,4 @@
-import { fetchJson } from "./http.ts";
+import { fetchJson, fetchSse } from "./http.ts";
 import type { CompletionRequest, Provider } from "./types.ts";
 
 export class AnthropicProvider implements Provider {
@@ -27,7 +27,7 @@ export class AnthropicProvider implements Provider {
     const system = [request.system, request.json ? "Respond with exactly one valid JSON object and nothing else." : ""]
       .filter(Boolean)
       .join("\n\n");
-    const data = await fetchJson("https://api.anthropic.com/v1/messages", {
+    const options = {
       label: "anthropic",
       timeoutMs: this.timeoutMs,
       signal: request.signal,
@@ -36,9 +36,21 @@ export class AnthropicProvider implements Provider {
         model: request.model || this.model,
         max_tokens: this.maxTokens,
         ...(system ? { system } : {}),
-        messages: request.messages
+        messages: request.messages,
+        ...(request.onText ? { stream: true } : {})
       }
-    });
+    };
+    if (request.onText) {
+      let text = "";
+      await fetchSse("https://api.anthropic.com/v1/messages", options, (event) => {
+        if (event.type === "content_block_delta" && event.delta?.type === "text_delta") {
+          text += event.delta.text;
+          request.onText?.(text);
+        }
+      });
+      return text.trim();
+    }
+    const data = await fetchJson("https://api.anthropic.com/v1/messages", options);
     return (data.content ?? [])
       .filter((block: { type: string }) => block.type === "text")
       .map((block: { text: string }) => block.text)

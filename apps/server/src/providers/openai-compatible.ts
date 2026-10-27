@@ -1,6 +1,6 @@
 import type { ProviderId } from "@synod/contracts";
-import { fetchJson, stripThinking } from "./http.ts";
-import type { CompletionRequest, Provider } from "./types.ts";
+import { fetchJson, fetchSse, stripThinking } from "./http.ts";
+import { ProviderError, type CompletionRequest, type Provider } from "./types.ts";
 
 export interface OpenAiCompatibleOptions {
   id: ProviderId;
@@ -44,7 +44,8 @@ export class OpenAiCompatibleProvider implements Provider {
       ...(request.system ? [{ role: "system", content: request.system }] : []),
       ...request.messages
     ];
-    const data = await fetchJson(`${baseUrl.replace(/\/+$/, "")}/chat/completions`, {
+    const url = `${baseUrl.replace(/\/+$/, "")}/chat/completions`;
+    const options = {
       label: this.id,
       timeoutMs,
       signal: request.signal,
@@ -53,9 +54,24 @@ export class OpenAiCompatibleProvider implements Provider {
         model: request.model || this.options.defaultModel,
         messages,
         ...(request.json && supportsJsonMode ? { response_format: { type: "json_object" } } : {}),
+        ...(request.onText ? { stream: true } : {}),
         ...extraBody
       }
-    });
+    };
+    if (request.onText) {
+      let text = "";
+      await fetchSse(url, options, (data) => {
+        // OpenRouter reports upstream failures inside the stream.
+        if (data.error) throw new ProviderError(`${this.id}: ${data.error.message ?? "stream error"}`, { status: Number(data.error.code) || null, retryable: true });
+        const delta = data.choices?.[0]?.delta?.content;
+        if (typeof delta === "string" && delta) {
+          text += delta;
+          request.onText?.(stripThinking(text));
+        }
+      });
+      return stripThinking(text);
+    }
+    const data = await fetchJson(url, options);
     return stripThinking(String(data.choices?.[0]?.message?.content ?? ""));
   }
 }

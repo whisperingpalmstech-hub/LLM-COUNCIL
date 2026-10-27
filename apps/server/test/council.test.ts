@@ -267,3 +267,17 @@ test("a medical case uses the medical council and brief sections", async () => {
   assert.equal(turn.mode, "medical");
   assert.deepEqual(turn.brief?.sections.map((s) => s.title), ["Differential diagnosis", "Can't-miss diagnoses", "Recommended workup"]);
 });
+
+test("answers and the synthesis stream as drafts; the brief is built alongside the synthesis", async () => {
+  const { engine, store } = setup();
+  engine.saveCouncil(council());
+  const keys = new Set<string>();
+  store.subscribeDrafts((d) => keys.add(d.key));
+  const id = engine.createConversation(undefined, "code");
+  engine.sendMessage(id, "Is it safe to run UPDATE orders SET status='paid' WHERE payment_id IS NOT NULL on a 40M row table?");
+  await engine.idle();
+  const turn = store.require(id).turns[0];
+  assert.equal(turn.status, "completed", turn.error);
+  assert.ok(keys.has("stage1:a") && keys.has("stage1:c") && keys.has("synthesis"), [...keys].join(","));
+  assert.deepEqual(turn.brief?.sections.map((s) => s.title), ["Bugs & risks", "Recommended changes", "Alternatives"]);
+});

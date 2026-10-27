@@ -184,6 +184,7 @@ export class CouncilEngine {
     // 1. Independent answers.
     stage("stage1");
     const question = questionBlock(context());
+    const draft = (key: string) => throttle((text: string) => store.publishDraft({ type: "draft", conversationId, turnId, key, text }), 120);
     await withStragglerCutoff(
       members,
       signal,
@@ -192,7 +193,7 @@ export class CouncilEngine {
         const started = Date.now();
         let response: Stage1Response;
         try {
-          const text = await providers.complete(member, { purpose: "answer", system: answerSystem(mode), messages: [{ role: "user", content: question }], signal: memberSignal });
+          const text = await providers.complete(member, { purpose: "answer", system: answerSystem(mode), messages: [{ role: "user", content: question }], signal: memberSignal, onText: draft(`stage1:${member.id}`) });
           response = { memberId: member.id, label: member.label, model: modelName(member), text, ms: Date.now() - started };
         } catch (error) {
           response = { memberId: member.id, label: member.label, model: modelName(member), text: "", error: memberError(error, memberSignal), ms: Date.now() - started };
@@ -232,43 +233,48 @@ export class CouncilEngine {
       emit({ type: "turn.stage2_aggregated", conversationId, turnId, aggregate: aggregateRankings(turn.stage2.filter((r) => !r.error), labelled) });
     }
 
-    // 3. Chairman synthesis.
+    // 3. Chairman synthesis and the structured brief, in parallel: both read the
+    //    same answers and critiques, so neither has to wait for the other.
     stage("stage3");
     turn = this.turn(conversationId, turnId);
     const reviews = turn.stage2.filter((r) => !r.error);
-    let synthesisText: string;
-    try {
-      synthesisText = await providers.complete(chairman, { purpose: "synthesis", messages: [{ role: "user", content: synthesisPrompt(context(), answered, reviews) }], signal });
-    } catch (error) {
-      if (signal.aborted) return;
-      // Degrade to the top-ranked answer rather than losing the turn.
-      const best = turn.aggregate?.rankings[0]?.memberId;
-      const fallback = answered.find((r) => r.memberId === best) ?? answered[0];
-      emit({
-        type: "turn.synthesis_completed",
-        conversationId,
-        turnId,
-        synthesis: { memberId: fallback.memberId, label: fallback.label, model: fallback.model, text: fallback.text, error: `Chairman failed (${errorMessage(error)}); showing the top-ranked answer instead.` }
-      });
-      synthesisText = fallback.text;
-    }
-    if (signal.aborted) return;
-    if (!this.turn(conversationId, turnId).synthesis) {
-      emit({ type: "turn.synthesis_completed", conversationId, turnId, synthesis: { memberId: chairman.id, label: chairman.label, model: modelName(chairman), text: synthesisText } });
-    }
+    const ranking = (turn.aggregate?.rankings ?? []).map((r) => r.label).join(" > ");
 
-    // 4. Second-opinion brief.
-    if (turn.council.brief) {
-      stage("brief");
+    const synthesis = (async () => {
       try {
-        const reply = await providers.complete(chairman, { purpose: "brief", json: true, messages: [{ role: "user", content: briefPrompt(context(), mode, answered, synthesisText) }], signal });
-        const version = store.require(conversationId).turns.filter((t) => t.brief).length + 1;
-        emit({ type: "turn.brief_generated", conversationId, turnId, brief: normalizeBrief(extractJson(reply), mode, version) });
+        const text = await providers.complete(chairman, {
+          purpose: "synthesis",
+          messages: [{ role: "user", content: synthesisPrompt(context(), answered, reviews) }],
+          signal,
+          onText: draft("synthesis")
+        });
+        if (!signal.aborted) emit({ type: "turn.synthesis_completed", conversationId, turnId, synthesis: { memberId: chairman.id, label: chairman.label, model: modelName(chairman), text } });
       } catch (error) {
         if (signal.aborted) return;
-        console.warn("[council] brief generation failed:", errorMessage(error));
+        // Degrade to the top-ranked answer rather than losing the turn.
+        const best = turn.aggregate?.rankings[0]?.memberId;
+        const fallback = answered.find((r) => r.memberId === best) ?? answered[0];
+        emit({
+          type: "turn.synthesis_completed",
+          conversationId,
+          turnId,
+          synthesis: { memberId: fallback.memberId, label: fallback.label, model: fallback.model, text: fallback.text, error: `Chairman failed (${errorMessage(error)}); showing the top-ranked answer instead.` }
+        });
       }
-    }
+    })();
+
+    const brief = (async () => {
+      if (!turn.council.brief) return;
+      try {
+        const reply = await providers.complete(chairman, { purpose: "brief", json: true, messages: [{ role: "user", content: briefPrompt(context(), mode, answered, reviews, ranking) }], signal });
+        const version = store.require(conversationId).turns.filter((t) => t.brief).length + 1;
+        if (!signal.aborted) emit({ type: "turn.brief_generated", conversationId, turnId, brief: normalizeBrief(extractJson(reply), mode, version) });
+      } catch (error) {
+        if (!signal.aborted) console.warn("[council] brief generation failed:", errorMessage(error));
+      }
+    })();
+
+    await Promise.all([synthesis, brief]);
     if (signal.aborted) return;
 
     emit({ type: "turn.completed", conversationId, turnId });
@@ -293,6 +299,28 @@ export class CouncilEngine {
       return null;
     }
   }
+}
+
+/** Call `fn` at most every `ms`, always delivering the latest value. */
+function throttle(fn: (text: string) => void, ms: number): (text: string) => void {
+  let last = 0;
+  let pending: string | null = null;
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  return (text) => {
+    const wait = ms - (Date.now() - last);
+    if (wait <= 0) {
+      last = Date.now();
+      fn(text);
+      return;
+    }
+    pending = text;
+    timer ??= setTimeout(() => {
+      timer = undefined;
+      last = Date.now();
+      if (pending !== null) fn(pending);
+      pending = null;
+    }, wait);
+  };
 }
 
 /**

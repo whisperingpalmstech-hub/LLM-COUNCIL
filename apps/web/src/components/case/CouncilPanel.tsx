@@ -1,6 +1,7 @@
 import { Tabs } from "@base-ui/react/tabs";
 import { Crown, X } from "lucide-react";
 import type { Turn } from "@synod/contracts";
+import { useDraft } from "~/lib/store";
 import { cn, formatDuration } from "~/lib/utils";
 import { Markdown } from "../Markdown";
 import { Button } from "../ui/button";
@@ -83,24 +84,47 @@ function MemberPicker({ items, selected, onSelect }: { items: { id: string; labe
 }
 
 function Opinions({ turn, memberId, onMemberChange }: { turn: Turn; memberId?: string; onMemberChange: (id: string) => void }) {
-  if (!turn.stage1.length) return <Empty text="Opinions appear here as each member finishes." />;
   const rank = new Map(turn.aggregate?.rankings.map((r, i) => [r.memberId, i + 1]));
-  const current = turn.stage1.find((r) => r.memberId === memberId) ?? turn.stage1[0];
+  const members = turn.council.members;
+  const selectedId = memberId && members.some((m) => m.id === memberId) ? memberId : members[0]?.id;
+  const current = turn.stage1.find((r) => r.memberId === selectedId);
+  const member = members.find((m) => m.id === selectedId);
+  if (!member) return <Empty text="No council members." />;
   return (
     <>
       <MemberPicker
-        items={turn.stage1.map((r) => ({ id: r.memberId, label: r.label, failed: Boolean(r.error), badge: rank.get(r.memberId) ? `#${rank.get(r.memberId)}` : undefined }))}
-        selected={current.memberId}
+        items={members.map((m) => {
+          const r = turn.stage1.find((x) => x.memberId === m.id);
+          return { id: m.id, label: m.label, failed: Boolean(r?.error), badge: rank.get(m.id) ? `#${rank.get(m.id)}` : r ? undefined : "…" };
+        })}
+        selected={selectedId}
         onSelect={onMemberChange}
       />
       <div className="min-h-0 flex-1 overflow-y-auto px-5 py-4">
-        <div className="mb-3 flex flex-wrap items-center gap-2 text-muted-foreground text-xs">
-          <span className="font-mono">{current.model}</span>
-          <span>· {formatDuration(current.ms)}</span>
-          {rank.get(current.memberId) === 1 && <Badge tone="success">Top-ranked by peers</Badge>}
-        </div>
-        {current.error ? <p className="text-error-foreground text-sm">Failed: {current.error}</p> : <Markdown text={current.text} />}
+        {current ? (
+          <>
+            <div className="mb-3 flex flex-wrap items-center gap-2 text-muted-foreground text-xs">
+              <span className="font-mono">{current.model}</span>
+              <span>· {formatDuration(current.ms)}</span>
+              {rank.get(current.memberId) === 1 && <Badge tone="success">Top-ranked by peers</Badge>}
+            </div>
+            {current.error ? <p className="text-error-foreground text-sm">Failed: {current.error}</p> : <Markdown text={current.text} />}
+          </>
+        ) : (
+          <LiveOpinion turnId={turn.id} memberId={member.id} running={turn.status === "running"} />
+        )}
       </div>
+    </>
+  );
+}
+
+function LiveOpinion({ turnId, memberId, running }: { turnId: string; memberId: string; running: boolean }) {
+  const text = useDraft(turnId, `stage1:${memberId}`);
+  if (!text) return <Empty text={running ? "Thinking…" : "No answer."} />;
+  return (
+    <>
+      <p className="live-shine mb-3 text-xs">Writing…</p>
+      <Markdown text={text} />
     </>
   );
 }

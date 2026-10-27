@@ -5,10 +5,12 @@ import {
   type Conversation,
   type ConversationEvent,
   type ConversationSummary,
+  type DraftPush,
   type NewConversationEvent
 } from "@synod/contracts";
 
 type Listener = (event: ConversationEvent) => void;
+type DraftListener = (draft: DraftPush) => void;
 
 /**
  * Append-only event store with an in-memory projection per conversation.
@@ -18,6 +20,7 @@ export class EventStore {
   private readonly db: DatabaseSync;
   private readonly projections = new Map<string, Conversation>();
   private readonly listeners = new Set<Listener>();
+  private readonly draftListeners = new Set<DraftListener>();
 
   constructor(db: DatabaseSync) {
     this.db = db;
@@ -41,6 +44,16 @@ export class EventStore {
       }
     }
     return event;
+  }
+
+  /** Broadcast streaming text without persisting it. */
+  publishDraft(draft: DraftPush): void {
+    for (const listener of this.draftListeners) listener(draft);
+  }
+
+  subscribeDrafts(listener: DraftListener): () => void {
+    this.draftListeners.add(listener);
+    return () => this.draftListeners.delete(listener);
   }
 
   subscribe(listener: Listener): () => void {

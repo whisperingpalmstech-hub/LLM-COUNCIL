@@ -3,7 +3,7 @@ import { useEffect, useRef, useState } from "react";
 import type { ServerInfo } from "@synod/contracts";
 import { api, fileToBase64 } from "~/lib/api";
 import { MODE_UI } from "~/lib/modes";
-import { useConversation } from "~/lib/store";
+import { useConversation, useDraftRev } from "~/lib/store";
 import { cn } from "~/lib/utils";
 import { Composer } from "../Composer";
 import { Button } from "../ui/button";
@@ -12,6 +12,7 @@ import { TurnBlock } from "./TurnBlock";
 
 export function CaseView({ id, info, onOpenSidebar }: { id: string; info: ServerInfo | null; onOpenSidebar: () => void }) {
   const conversation = useConversation(id);
+  const draftRev = useDraftRev();
   const [draft, setDraft] = useState("");
   const [panel, setPanel] = useState<{ turnId: string; tab: PanelTab; memberId?: string } | null>(null);
   const scroller = useRef<HTMLDivElement>(null);
@@ -20,8 +21,8 @@ export function CaseView({ id, info, onOpenSidebar }: { id: string; info: Server
   // Follow new content while the user is at the bottom (T3-style auto-follow).
   useEffect(() => {
     const el = scroller.current;
-    if (el && pinned.current) el.scrollTo({ top: el.scrollHeight, behavior: "smooth" });
-  }, [conversation?.seq]);
+    if (el && pinned.current) el.scrollTo({ top: el.scrollHeight });
+  }, [conversation?.seq, draftRev]);
 
   if (!conversation) return <div className="flex flex-1 items-center justify-center text-muted-foreground text-sm">Loading case…</div>;
 

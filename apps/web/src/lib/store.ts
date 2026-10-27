@@ -11,6 +11,10 @@ class ClientStore {
   conversations = new Map<string, Conversation>();
   summaries: ConversationSummary[] = [];
   connected = false;
+  /** Live partial text by `${turnId}:${key}`; dropped once the final event lands. */
+  drafts = new Map<string, string>();
+  /** Bumps on every draft update so views can follow streaming text. */
+  draftRev = 0;
   private listeners = new Set<Listener>();
   private socket: WebSocket | null = null;
   private retry = 0;
@@ -40,7 +44,20 @@ class ClientStore {
     };
     socket.onmessage = (message) => {
       const push = JSON.parse(String(message.data)) as ServerPush;
+      if (push.type === "draft") {
+        if (this.isFinal(push.conversationId, push.turnId, push.key)) return;
+        this.drafts = new Map(this.drafts).set(`${push.turnId}:${push.key}`, push.text);
+        this.draftRev++;
+        this.emit();
+        return;
+      }
       const { event } = push;
+      const finalKey =
+        event.type === "turn.stage1_response" ? `${event.turnId}:stage1:${event.response.memberId}` : event.type === "turn.synthesis_completed" ? `${event.turnId}:synthesis` : null;
+      if (finalKey && this.drafts.has(finalKey)) {
+        this.drafts = new Map(this.drafts);
+        this.drafts.delete(finalKey);
+      }
       const current = this.conversations.get(event.conversationId);
       if (current) {
         this.conversations = new Map(this.conversations).set(event.conversationId, applyEvent(current, event));
@@ -54,6 +71,15 @@ class ClientStore {
       this.emit();
       setTimeout(() => this.connect(), Math.min(10_000, 500 * 2 ** this.retry++));
     };
+  }
+
+  /** A late draft must not resurrect text whose final version has arrived. */
+  private isFinal(conversationId: string, turnId: string, key: string): boolean {
+    const turn = this.conversations.get(conversationId)?.turns.find((t) => t.id === turnId);
+    if (!turn) return false;
+    if (key === "synthesis") return Boolean(turn.synthesis);
+    const memberId = key.slice("stage1:".length);
+    return turn.stage1.some((r) => r.memberId === memberId);
   }
 
   async load(id: string) {
@@ -92,4 +118,12 @@ export function useSummaries(): ConversationSummary[] {
 
 export function useConnected(): boolean {
   return useSyncExternalStore(store.subscribe, () => store.connected);
+}
+
+export function useDraft(turnId: string, key: string): string | undefined {
+  return useSyncExternalStore(store.subscribe, () => store.drafts.get(`${turnId}:${key}`));
+}
+
+export function useDraftRev(): number {
+  return useSyncExternalStore(store.subscribe, () => store.draftRev);
 }

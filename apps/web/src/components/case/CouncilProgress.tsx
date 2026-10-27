@@ -2,6 +2,7 @@
 import { Check, ChevronDown, Crown, FileCheck2, Globe, Scale, Users, X } from "lucide-react";
 import { useEffect, useState, type ReactNode } from "react";
 import type { CouncilMember, Turn, TurnStage } from "@synod/contracts";
+import { useDraft } from "~/lib/store";
 import { cn, formatDuration } from "~/lib/utils";
 import { Spinner } from "../ui/misc";
 import type { PanelTab } from "./CouncilPanel";
@@ -26,7 +27,7 @@ export function CouncilProgress({ turn, onOpenPanel }: { turn: Turn; onOpenPanel
   const showStage1 = turn.stage1.length > 0 || reached("stage1");
   const showStage2 = turn.stage2.length > 0 || reached("stage2");
   const showStage3 = Boolean(turn.synthesis) || reached("stage3");
-  const showBrief = Boolean(turn.brief) || live("brief");
+  const showBrief = Boolean(turn.brief) || (turn.council.brief && (live("stage3") || live("brief")));
   if (!showStage1 && !live("clarify") && !live("research")) {
     return turn.status === "running" ? <Row icon={<Spinner />} label={<span className="live-shine">Convening the council…</span>} /> : null;
   }
@@ -55,13 +56,14 @@ export function CouncilProgress({ turn, onOpenPanel }: { turn: Turn; onOpenPanel
               {members.map((m) => {
                 const r = turn.stage1.find((x) => x.memberId === m.id);
                 return (
-                  <MemberRow
+                  <StreamingMemberRow
                     key={m.id}
+                    turnId={turn.id}
                     member={m}
                     state={r ? (r.error ? "error" : "done") : live("stage1") ? "running" : "idle"}
                     trailing={r ? formatDuration(r.ms) : live("stage1") ? formatDuration(stageElapsed) : ""}
                     detail={r?.error}
-                    onClick={r && !r.error ? () => onOpenPanel("opinions", m.id) : undefined}
+                    onClick={!r?.error ? () => onOpenPanel("opinions", m.id) : undefined}
                   />
                 );
               })}
@@ -92,16 +94,16 @@ export function CouncilProgress({ turn, onOpenPanel }: { turn: Turn; onOpenPanel
             <Group title="Verdict">
               {showStage3 && (
                 <Row
-                  icon={live("stage3") ? <Spinner /> : <Crown className="size-3.5 text-amber-500" />}
-                  label={live("stage3") ? <span className="live-shine">{turn.council.chairman.label} is weighing the opinions…</span> : `${turn.council.chairman.label} wrote the synthesis`}
-                  trailing={live("stage3") ? formatDuration(stageElapsed) : ""}
+                  icon={!turn.synthesis ? <Spinner /> : <Crown className="size-3.5 text-amber-500" />}
+                  label={!turn.synthesis ? <span className="live-shine">{turn.council.chairman.label} is weighing the opinions…</span> : `${turn.council.chairman.label} wrote the synthesis`}
+                  trailing={!turn.synthesis && turn.status === "running" ? formatDuration(stageElapsed) : ""}
                 />
               )}
               {showBrief && (
                 <Row
-                  icon={live("brief") ? <Spinner /> : <FileCheck2 className="size-3.5 text-success" />}
-                  label={live("brief") ? <span className="live-shine">Drafting the brief…</span> : "Brief ready"}
-                  trailing={live("brief") ? formatDuration(stageElapsed) : ""}
+                  icon={!turn.brief ? <Spinner /> : <FileCheck2 className="size-3.5 text-success" />}
+                  label={!turn.brief ? <span className="live-shine">Drafting the brief…</span> : "Brief ready"}
+                  trailing={!turn.brief && turn.status === "running" ? formatDuration(stageElapsed) : ""}
                 />
               )}
             </Group>
@@ -142,6 +144,13 @@ function Group({ title, hint, children }: { title: string; hint?: string; childr
   );
 }
 
+/** A stage-1 member row that shows how much the model has written so far. */
+function StreamingMemberRow(props: Parameters<typeof MemberRow>[0] & { turnId: string }) {
+  const draft = useDraft(props.turnId, `stage1:${props.member.id}`);
+  const words = draft ? draft.split(/\s+/).length : 0;
+  return <MemberRow {...props} verb={draft ? `writing · ${words} words` : "thinking"} />;
+}
+
 function MemberRow({
   member,
   state,
@@ -157,8 +166,9 @@ function MemberRow({
   verb?: string;
   onClick?: () => void;
 }) {
+  const skipped = state === "error" && detail?.startsWith("Too slow");
   const icon =
-    state === "running" ? <Spinner className="text-primary" /> : state === "done" ? <Check className="size-3.5 text-success" /> : state === "error" ? <X className="size-3.5 text-error" /> : <span className="size-1.5 rounded-full bg-muted-foreground/40" />;
+    skipped ? <span className="size-1.5 rounded-full bg-muted-foreground/50" /> : state === "running" ? <Spinner className="text-primary" /> : state === "done" ? <Check className="size-3.5 text-success" /> : state === "error" ? <X className="size-3.5 text-error" /> : <span className="size-1.5 rounded-full bg-muted-foreground/40" />;
   return (
     <Row
       icon={icon}
@@ -166,7 +176,7 @@ function MemberRow({
         <span className="flex min-w-0 items-baseline gap-1.5">
           <span className={cn("truncate", state === "running" ? "live-shine" : "text-foreground")}>{member.label}</span>
           {state === "running" && <span className="shrink-0 text-muted-foreground">{verb}…</span>}
-          {state === "error" && <span className="truncate text-error-foreground text-xs">{detail}</span>}
+          {state === "error" && (skipped ? <span className="truncate text-muted-foreground text-xs">skipped · too slow</span> : <span className="truncate text-error-foreground text-xs">{detail}</span>)}
         </span>
       }
       trailing={trailing}

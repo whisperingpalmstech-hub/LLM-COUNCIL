@@ -59,7 +59,7 @@ Here are the responses from different models (anonymized):
 ${responses}
 
 Your task:
-1. First, evaluate each response individually. For each response, explain what it does well and what it does poorly.
+1. First, evaluate each response individually: in 1-3 sentences each, name its most important strengths and any errors, omissions, or unsafe advice. Be concrete; do not summarize the response.
 2. Then, at the very end of your response, provide a final ranking.
 
 IMPORTANT: Your final ranking MUST be formatted EXACTLY as follows:
@@ -101,19 +101,22 @@ Your task as Chairman is to synthesize all of this information into a single, co
 Keep genuine disagreement visible rather than averaging it away. Provide a clear, well-reasoned final answer that represents the council's collective wisdom:`;
 }
 
-export function briefPrompt(ctx: TurnContext, mode: CaseMode, answers: Stage1Response[], synthesis: string): string {
+export function briefPrompt(ctx: TurnContext, mode: CaseMode, answers: Stage1Response[], reviews: Stage2Review[], ranking: string): string {
   const def = MODES[mode];
-  const members = answers.map((r) => `${r.label}:\n${truncate(r.text, 2500)}`).join("\n\n");
+  const members = answers.map((r, i) => `Response ${String.fromCharCode(65 + i)} — ${r.label}:\n${truncate(r.text, 3000)}`).join("\n\n");
+  const critiques = reviews.map((r) => `${r.label}:\n${truncate(r.text.replace(/FINAL RANKING:[\s\S]*$/, ""), 1200)}`).join("\n\n");
   const sections = def.sections.map((s) => `    {"title": ${JSON.stringify(s.title)}, "items": [{"text": string, "detail": string, "level": "high"|"medium"|"low"}]}  // ${s.guidance}`).join(",\n");
   return `${questionBlock(ctx)}
 
 Individual council answers:
 ${members}
 
-The chairman's synthesis:
-${synthesis}
+Peer critiques (members reviewed each other's answers anonymously; labels refer to the answers above in order):
+${critiques || "None"}
 
-Distill all of this into a structured second-opinion brief. Return JSON with exactly these fields:
+Peer ranking (best first): ${ranking || "not available"}
+
+You are the chairman. Weigh the answers by their quality and the critiques (correct errors the critiques identified; don't just average), then write a structured second-opinion brief. Return JSON with exactly these fields:
 {
   "verdict": string,            // ${def.verdictHint}; at most 10 words
   "bottomLine": string,         // 1-2 sentences: the answer a busy professional needs first

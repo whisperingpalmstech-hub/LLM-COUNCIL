@@ -15,6 +15,8 @@ export interface CompletionRequest {
   json?: boolean;
   purpose: CompletionPurpose;
   signal?: AbortSignal;
+  /** When set, the provider streams and calls this with the full text so far. */
+  onText?: (textSoFar: string) => void;
 }
 
 export interface Provider {

@@ -21,6 +21,16 @@ export class MockProvider implements Provider {
   }
 
   async complete(request: CompletionRequest): Promise<string> {
+    const text = await this.reply(request);
+    if (request.onText) {
+      // Simulate streaming in a few chunks.
+      const step = Math.max(1, Math.ceil(text.length / 4));
+      for (let i = step; i < text.length; i += step) request.onText(text.slice(0, i));
+    }
+    return text;
+  }
+
+  private async reply(request: CompletionRequest): Promise<string> {
     if (this.delayMs) await new Promise((r) => setTimeout(r, this.delayMs));
     request.signal?.throwIfAborted();
     const prompt = request.messages.at(-1)?.content ?? "";

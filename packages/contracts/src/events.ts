@@ -42,8 +42,20 @@ export type ConversationEvent =
 export type DistributiveOmit<T, K extends PropertyKey> = T extends unknown ? Omit<T, K> : never;
 export type NewConversationEvent = DistributiveOmit<ConversationEvent, "seq" | "at">;
 
+/**
+ * Live partial text while a model is still writing. Ephemeral: never stored;
+ * the final text arrives as a normal event. `key` is "stage1:<memberId>" or "synthesis".
+ */
+export interface DraftPush {
+  type: "draft";
+  conversationId: string;
+  turnId: string;
+  key: string;
+  text: string;
+}
+
 /** Messages pushed from server to browser over the WebSocket. */
-export type ServerPush = { type: "event"; event: ConversationEvent };
+export type ServerPush = { type: "event"; event: ConversationEvent } | DraftPush;
 
 export function emptyConversation(id: string): Conversation {
   return { id, title: "", mode: "general", archived: false, createdAt: "", updatedAt: "", pendingAttachments: [], turns: [], seq: 0 };

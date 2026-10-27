@@ -16,7 +16,8 @@ export interface ModeDefinition {
 
 const SHARED_STYLE =
   "Be specific and concrete. Show your reasoning, state assumptions, and say plainly when you are uncertain or when evidence is weak. " +
-  "Do not hedge everything equally: commit to what you think is most likely or best, and flag what could change your mind. Use Markdown.";
+  "Do not hedge everything equally: commit to what you think is most likely or best, and flag what could change your mind. " +
+  "Be dense, not long: lead with your conclusion and keep the whole answer under about 500 words. Use Markdown.";
 
 export const MODES: Record<CaseMode, ModeDefinition> = {
   medical: {

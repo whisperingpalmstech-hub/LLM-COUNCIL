@@ -1,4 +1,4 @@
-import { fetchJson } from "./http.ts";
+import { fetchJson, fetchSse } from "./http.ts";
 import type { CompletionRequest, Provider } from "./types.ts";
 
 export class GeminiProvider implements Provider {
@@ -23,7 +23,8 @@ export class GeminiProvider implements Provider {
 
   async complete(request: CompletionRequest): Promise<string> {
     const model = encodeURIComponent(request.model || this.model);
-    const data = await fetchJson(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`, {
+    const base = `https://generativelanguage.googleapis.com/v1beta/models/${model}`;
+    const options = {
       label: "gemini",
       timeoutMs: this.timeoutMs,
       signal: request.signal,
@@ -33,10 +34,17 @@ export class GeminiProvider implements Provider {
         contents: request.messages.map((m) => ({ role: m.role === "assistant" ? "model" : "user", parts: [{ text: m.content }] })),
         ...(request.json ? { generationConfig: { responseMimeType: "application/json" } } : {})
       }
-    });
-    return (data.candidates?.[0]?.content?.parts ?? [])
-      .map((part: { text?: string }) => part.text ?? "")
-      .join("")
-      .trim();
+    };
+    const partsText = (data: any) => (data.candidates?.[0]?.content?.parts ?? []).map((part: { text?: string }) => part.text ?? "").join("");
+    if (request.onText) {
+      let text = "";
+      await fetchSse(`${base}:streamGenerateContent?alt=sse`, options, (data) => {
+        text += partsText(data);
+        request.onText?.(text);
+      });
+      return text.trim();
+    }
+    const data = await fetchJson(`${base}:generateContent`, options);
+    return partsText(data).trim();
   }
 }
