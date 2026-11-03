@@ -45,7 +45,7 @@ OpenAI, Anthropic, Gemini, DeepSeek, OpenRouter, SiliconFlow, Ollama, RouteLLM a
 | --- | --- |
 | Clarifying question | Council settings (on by default) |
 | Second-opinion brief, Markdown export | Council settings (on by default) |
-| Web search shared with the council | `TAVILY_API_KEY` or `PERPLEXITY_API_KEY`, then enable it in settings |
+| Web search shared with the council | `EXA_API_KEY`, then enable it in settings |
 | File attachments | 📎 button or paste. Text-like files are shared with the council (up to 20k characters each) |
 | Upload from phone | 📱 button shows a QR code with a signed link to that case (valid 12 hours). Set `PUBLIC_BASE_URL` when off-LAN |
 | Voice input | `OPENROUTER_API_KEY` (cheap `google/gemini-2.5-flash-lite`, with fallbacks), or local whisper.cpp, or `OPENAI_API_KEY` |
