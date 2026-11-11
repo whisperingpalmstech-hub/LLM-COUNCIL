@@ -491,6 +491,21 @@ test("Discuss: the moderator casts personas, waits for approval, and the panel t
   assert.equal(last.author.kind === "model" && last.author.memberId, "c");
 });
 
+test("Discuss: personas with titles can be mentioned by first name", async () => {
+  const { mentioned } = await import("../src/council/discussion.ts");
+  const members = council().members;
+  const personas = [
+    { memberId: "a", name: "Dr Helen Ashworth", role: "", stance: "", style: "", voice: "sarah" as const },
+    { memberId: "b", name: "Dr. Tomasz Wierzbicki", role: "", stance: "", style: "", voice: "daniel" as const },
+    { memberId: "c", name: "Priya Raghunathan", role: "", stance: "", style: "", voice: "matilda" as const }
+  ];
+  const ids = (text: string) => mentioned(text, members, personas).map((m) => m.id);
+  assert.deepEqual(ids("@Tomasz does that change your view?"), ["b"]);
+  assert.deepEqual(ids("@Dr Helen Ashworth and @Priya, thoughts?"), ["a", "c"]);
+  assert.deepEqual(ids("@Beta what do you think?"), ["b"], "model names still work");
+  assert.deepEqual(ids("no mention here, Dr Ashworth"), []);
+});
+
 test("Discuss: recasting replaces the proposed panel; an empty confirmation runs without personas", async () => {
   const { engine, store } = setup();
   engine.saveCouncil(council({ discussion: withPersonas }));

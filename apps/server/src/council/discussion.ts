@@ -149,9 +149,14 @@ Write the conclusion the user needs: lead with the answer, keep real disagreemen
 export function mentioned(text: string, members: CouncilMember[], personas: Persona[] = []): CouncilMember[] {
   if (personas.length) {
     // People can be addressed by persona name or by model name.
-    const byPersona = mentionedByLabel(text, members.map((m) => ({ ...m, label: nameOf(m, personas) })));
-    const byModel = mentionedByLabel(text, members);
-    return members.filter((m) => byPersona.some((x) => x.id === m.id) || byModel.some((x) => x.id === m.id));
+    // "@Dr Tomasz Wierzbicki", "@Tomasz Wierzbicki" and "@Tomasz" should all reach the same person.
+    const untitled = (name: string) => name.replace(/^(dr|prof|professor|mr|mrs|ms|sir|dame)\.?\s+/i, "");
+    const hits = [
+      ...mentionedByLabel(text, members.map((m) => ({ ...m, label: nameOf(m, personas) }))),
+      ...mentionedByLabel(text, members.map((m) => ({ ...m, label: untitled(nameOf(m, personas)) }))),
+      ...mentionedByLabel(text, members)
+    ];
+    return members.filter((m) => hits.some((x) => x.id === m.id));
   }
   return mentionedByLabel(text, members);
 }
