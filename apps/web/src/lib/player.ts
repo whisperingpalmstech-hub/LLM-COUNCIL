@@ -279,13 +279,17 @@ export function useDebatePlayer(conversation: Conversation, options: { enabled: 
   };
 }
 
-/** A new listener starts at the latest exchange: the last thing the user said and what followed. */
+/**
+ * Where a new listener starts: a finished debate plays from the top; a live one
+ * from the latest exchange (the last thing the user said and what follows).
+ */
 function startIndex(items: ChatMessage[], live: boolean): number {
+  if (!live) return 0;
   let lastUser = 0;
   items.forEach((m, i) => {
     if (m.author.kind === "user") lastUser = i;
   });
-  return live || lastUser < items.length - 1 ? lastUser : items.length;
+  return lastUser;
 }
 
 /** Plain words for captions: markdown marks removed. */

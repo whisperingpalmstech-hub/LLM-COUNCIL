@@ -638,8 +638,9 @@ export class CouncilEngine {
     const answers: Stage1Response[] = members
       .map((m) => ({ m, text: conversation.chat.filter((c) => c.author.kind === "model" && c.author.memberId === m.id && !c.error).map((c) => c.text).join("\n\n") }))
       .filter((x) => x.text)
-      .map((x) => ({ round: 1, memberId: x.m.id, label: x.m.label, model: modelName(x.m), text: x.text, ms: 0 }));
-    const ctx = { ...buildContext(turn, []), prompt: `Group discussion (user messages included):\n${conversation.chat.map((c) => `${c.author.kind === "user" ? "User" : c.author.label}: ${c.text}`).join("\n\n").slice(-30_000)}` };
+      // The brief names people the way the debate did: by persona when there was a cast.
+      .map((x) => ({ round: 1, memberId: x.m.id, label: nameOf(x.m, conversation.personas), model: modelName(x.m), text: x.text, ms: 0 }));
+    const ctx = { ...buildContext(turn, []), prompt: `Group discussion (user messages included):\n${conversation.chat.map((c) => `${c.author.kind === "user" ? "User" : c.author.persona || c.author.label}: ${c.text}`).join("\n\n").slice(-30_000)}` };
     const draft = throttle((text: string) => store.publishDraft({ type: "draft", conversationId, turnId, key: "synthesis", text }), 120);
 
     const synthesis = (async () => {
