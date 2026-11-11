@@ -15,8 +15,12 @@ import type {
   CreateConversationRequest,
   SendMessageRequest,
   ServerInfo,
-  UploadAttachmentRequest
+  UploadAttachmentRequest,
+  AddKnowledgeBaseRequest
 } from "@synod/contracts";
+import { VOICES, type VoiceId } from "@synod/contracts";
+import type { KnowledgeStore } from "../integrations/knowledge.ts";
+import type { Speech } from "../integrations/speech.ts";
 import type { Config } from "../config.ts";
 import type { CouncilEngine } from "../council/engine.ts";
 import { briefMarkdown } from "../council/brief.ts";
@@ -47,9 +51,11 @@ export interface AppDeps {
   transcriber: Transcriber;
   accounts: Accounts;
   secret: string;
+  knowledge: KnowledgeStore;
+  speech: Speech;
 }
 
-export function createApp({ config, store, engine, providers, search, transcriber, accounts, secret }: AppDeps): express.Express {
+export function createApp({ config, store, engine, providers, search, transcriber, accounts, secret, knowledge, speech }: AppDeps): express.Express {
   const loginLimiter = new RateLimiter(10, 15 * 60_000);
   const signupLimiter = new RateLimiter(5, 60 * 60_000);
 
@@ -181,6 +187,7 @@ export function createApp({ config, store, engine, providers, search, transcribe
       providers: providers.status(),
       search: { configured: Boolean(search.provider()), provider: search.provider() },
       voice: { available: Boolean(voice), engine: voice },
+      speech: { available: speech.available() },
       obsidian: { enabled: Boolean(config.obsidianVaultPath) },
       hermes: { configured: Boolean(config.hermes) },
       publicBaseUrl: config.publicBaseUrl ?? lanUrl(config.port)
@@ -234,6 +241,7 @@ export function createApp({ config, store, engine, providers, search, transcribe
   });
   // ---- Discuss mode ----
   const sendOptions = (req: Request) => ({
+    rounds: Number.isFinite(Number(req.body?.rounds)) && req.body?.rounds != null ? Number(req.body.rounds) : undefined,
     depth: ["quick", "standard", "thorough"].includes(req.body?.depth) ? (req.body.depth as "quick") : undefined,
     timezone: typeof req.body?.timezone === "string" ? req.body.timezone.slice(0, 64) : undefined,
     profile: req.user!.profile,
@@ -249,6 +257,45 @@ export function createApp({ config, store, engine, providers, search, transcribe
     engine.continueDiscussion(String(req.params.id), sendOptions(req));
     res.status(202).json({ ok: true });
   });
+  api.post("/conversations/:id/chat/personas", (req, res) => {
+    owned(String(req.params.id), req.user);
+    engine.confirmPersonas(String(req.params.id), req.body?.personas, sendOptions(req));
+    res.status(202).json({ ok: true });
+  });
+  api.post("/conversations/:id/chat/recast", (req, res) => {
+    owned(String(req.params.id), req.user);
+    engine.recast(String(req.params.id), String(req.body?.hint ?? ""), sendOptions(req));
+    res.status(202).json({ ok: true });
+  });
+  // A panellist's message, spoken in their persona's voice.
+  const voiceIds = VOICES.map((v) => v.id) as VoiceId[];
+  const sendAudio = (res: Response, audio: Buffer) => res.type("audio/mpeg").setHeader("Cache-Control", "private, max-age=604800, immutable").send(audio);
+  api.get("/conversations/:id/chat/:messageId/speech", async (req, res) => {
+    const conversation = owned(String(req.params.id), req.user);
+    const message = conversation.chat.find((m) => m.id === req.params.messageId);
+    if (!message || message.author.kind !== "model" || !message.text) throw Object.assign(new Error("Message not found."), { status: 404 });
+    const author = message.author;
+    const speakers = [...new Set(conversation.chat.flatMap((m) => (m.author.kind === "model" ? [m.author.memberId] : [])))];
+    const voice = conversation.personas.find((p) => p.memberId === author.memberId)?.voice ?? voiceIds[Math.max(0, speakers.indexOf(author.memberId)) % voiceIds.length];
+    sendAudio(res, await speech.synthesize(message.text, voice, engine.council(req.user!.id).discussion.voice));
+  });
+  api.get("/speech/sample", async (req, res) => {
+    const voice = voiceIds.find((v) => v === req.query.voice);
+    if (!voice) throw Object.assign(new Error("Unknown voice."), { status: 400 });
+    sendAudio(res, await speech.synthesize("Hello. This is how I'll sound in the debate.", voice, engine.council(req.user!.id).discussion.voice));
+  });
+
+  // ---- knowledge bases ----
+  api.get("/knowledge", (req, res) => res.json(knowledge.list(req.user!.id)));
+  api.post("/knowledge", async (req, res) => {
+    res.status(201).json(await knowledge.add({ id: req.user!.id, admin: req.user!.role === "admin" }, req.body as AddKnowledgeBaseRequest));
+  });
+  api.patch("/knowledge/:kbId", (req, res) => res.json(knowledge.update(req.user!.id, String(req.params.kbId), req.body ?? {})));
+  api.delete("/knowledge/:kbId", async (req, res) => {
+    await knowledge.remove(req.user!.id, String(req.params.kbId));
+    res.json({ ok: true });
+  });
+
   api.post("/conversations/:id/chat/stop", (req, res) => {
     owned(String(req.params.id), req.user);
     engine.stopDiscussion(String(req.params.id));

@@ -79,3 +79,11 @@ The v1 codebase (Express + a 3,000-line vanilla JS frontend + a 1,265-line orche
 * Committed binaries (`vendor/`) and runtime data (`data/`). These are now git-ignored.
 
 v1 data in `data/synod.sqlite` is not migrated. The v2 tables live alongside the old ones in the same file.
+
+## Debates (Discuss mode)
+
+- **Casting.** On the first message of a discussion the engine emits `chat.casting`, asks a fast model for one persona per member (`castingPrompt`), streams finished personas as a `cast` draft, and emits `chat.personas_proposed`. Nothing is said until the user confirms (`chat.personas_confirmed`, possibly edited or empty).
+- **Rounds.** `discuss()` runs up to `rounds` rounds; in each the moderator picks up to `speakersPerRound` panellists, who speak in order and see everything before them. A user message restarts the count. Routing calls run with reasoning off and debate turns with low effort, because someone is waiting.
+- **Voices.** `integrations/speech.ts` calls OpenRouter `/audio/speech` and caches MP3s on disk by text, voice and model. Audio is only generated when a listener asks for a message (`GET …/chat/:messageId/speech`).
+- **Views.** Chat, Round Table and Stage are three renderings of the same event-sourced conversation. `lib/player.ts` walks the messages, plays audio (or paces silently), and sets `--voice-level` for the avatars' mouths.
+- **Knowledge bases.** `integrations/knowledge.ts` keeps each user's sources in the settings table, with extracted text on disk. Files and links are searched by keyword (BM25); sources under 5,000 characters are included whole; AnythingLLM workspaces are queried live. Links to private network addresses are refused (AnythingLLM on a private address needs an admin).

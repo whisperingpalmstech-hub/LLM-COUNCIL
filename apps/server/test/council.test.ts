@@ -49,6 +49,7 @@ const council = (overrides: Partial<CouncilConfig> = {}): CouncilConfig => ({
   clarify: false,
   brief: true,
   webSearch: false,
+  discussion: { personas: false, rounds: 3, speakersPerRound: 3, speechLength: "short", voice: "natural" },
   ...overrides
 });
 
@@ -455,4 +456,123 @@ test("intake asks up to 3 multiple-choice questions", async () => {
   assert.deepEqual(c.questions?.[0], { id: "q1", question: "What would make this a success?", options: ["Lower cost", "Faster delivery", "Less risk"], multiple: true });
   assert.equal(c.questions?.[1].multiple, undefined);
   assert.match(c.question, /success.*decide/);
+});
+
+const withPersonas = { personas: true, rounds: 2, speakersPerRound: 2, speechLength: "medium", voice: "natural" } as const;
+
+test("Discuss: the moderator casts personas, waits for approval, and the panel then speaks in character", async () => {
+  const { engine, store } = setup();
+  engine.saveCouncil(council({ discussion: withPersonas }));
+  const id = engine.createConversation(undefined, "general", undefined, "chat");
+  await engine.chat(id, "Should we hire a head of sales before product-market fit?");
+  await discussionIdle(engine, store, id);
+  let c = store.require(id);
+  assert.equal(c.personaStatus, "proposed");
+  assert.deepEqual(c.personas.map((p) => p.memberId), ["a", "b", "c"]);
+  assert.equal(new Set(c.personas.map((p) => p.voice)).size, 3, "each persona gets its own voice");
+  assert.equal(c.chat.length, 1, "nobody speaks before the cast is approved");
+  assert.throws(() => engine.confirmPersonas(engine.createConversation(undefined, "general", undefined, "chat"), []), /no proposed panel/);
+
+  // The user renames one persona, then starts the debate.
+  engine.confirmPersonas(id, c.personas.map((p) => (p.memberId === "a" ? { ...p, name: "Priya Raman", stance: "x".repeat(900) } : p)));
+  await discussionIdle(engine, store, id);
+  c = store.require(id);
+  assert.equal(c.personaStatus, "confirmed");
+  assert.equal(c.personas[0].stance.length, 280, "edited text is length-limited");
+  const first = c.chat[1];
+  assert.equal(first.author.kind === "model" && first.author.persona, "Priya Raman");
+  assert.match(c.chat[2].text, /Building on Priya Raman/, "the transcript uses persona names");
+  assert.deepEqual([c.notes[0].round, c.notes[0].of], [1, 2]);
+
+  // Panellists can be addressed by persona name.
+  await engine.chat(id, "@Ines what's the downside?");
+  await discussionIdle(engine, store, id);
+  const last = store.require(id).chat.at(-1)!;
+  assert.equal(last.author.kind === "model" && last.author.memberId, "c");
+});
+
+test("Discuss: recasting replaces the proposed panel; an empty confirmation runs without personas", async () => {
+  const { engine, store } = setup();
+  engine.saveCouncil(council({ discussion: withPersonas }));
+  const id = engine.createConversation(undefined, "general", undefined, "chat");
+  await engine.chat(id, "Monorepo or polyrepo?");
+  await discussionIdle(engine, store, id);
+  engine.recast(id, "make them engineers");
+  await discussionIdle(engine, store, id);
+  assert.equal(store.require(id).personaStatus, "proposed");
+  engine.confirmPersonas(id, []);
+  await discussionIdle(engine, store, id);
+  const c = store.require(id);
+  assert.deepEqual(c.personas, []);
+  assert.match(c.chat[2].text, /Building on Alpha/);
+  assert.throws(() => engine.recast(id, ""), /before the debate starts/);
+});
+
+test("Discuss: rounds and speakers per round bound how long the panel talks", async () => {
+  const { engine, store } = setup();
+  engine.saveCouncil(council({ discussion: { ...withPersonas, personas: false, rounds: 2, speakersPerRound: 1 } }));
+  const id = engine.createConversation(undefined, "general", undefined, "chat");
+  await engine.chat(id, "MOCK_SECOND_ROUND should we expand to Europe?");
+  await discussionIdle(engine, store, id);
+  const c = store.require(id);
+  assert.deepEqual(c.chat.map((m) => (m.author.kind === "user" ? "user" : m.author.memberId)), ["user", "a", "c"], "one speaker per round, two rounds");
+  assert.deepEqual(c.notes.map((n) => n.round), [1, 2]);
+});
+
+test("Knowledge bases: files are searched by relevance, small sources are given whole, and they reach the council", async () => {
+  const { KnowledgeStore, htmlToText, parseWorkspaceLink, split } = await import("../src/integrations/knowledge.ts");
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "synod-kb-"));
+  const db = openDatabase(":memory:");
+  const settings = new Settings(db);
+  const knowledge = new KnowledgeStore(settings, dir);
+  const user = { id: "u1", admin: false };
+  const filler = Array.from({ length: 40 }, (_, i) => `Section ${i}. General onboarding notes about office hours, parking, and the canteen menu for week ${i}.`).join("\n\n");
+  const handbook = `${filler}\n\nRefund policy: enterprise customers may cancel within 45 days for a full refund, approved by the finance director.\n\n${filler}`;
+  const big = await knowledge.add(user, { kind: "file", fileName: "handbook.md", mimeType: "text/markdown", data: Buffer.from(handbook).toString("base64") });
+  const small = await knowledge.add(user, { kind: "file", name: "House style", fileName: "style.txt", mimeType: "text/plain", data: Buffer.from("Always answer in British English.").toString("base64") });
+  assert.equal(big.kind, "file");
+  assert.equal(knowledge.list("someone-else").length, 0, "knowledge bases are private to their owner");
+
+  const hits = await knowledge.search("u1", "What is the refund window for enterprise customers?");
+  assert.equal(hits[0].title, "House style", "small sources are always included");
+  assert.match(hits[1].snippet, /45 days/);
+  assert.equal(hits[1].source, "knowledge");
+
+  knowledge.update("u1", small.id, { enabled: false });
+  assert.ok(!(await knowledge.search("u1", "refund")).some((h) => h.title === "House style"), "disabled sources are skipped");
+  await assert.rejects(() => knowledge.add(user, { kind: "link", url: "http://127.0.0.1:9/secret" }), /private network/);
+  await assert.rejects(() => knowledge.add(user, { kind: "link", url: "file:///etc/passwd" }), /valid link|private|find that address/);
+  await knowledge.remove("u1", big.id);
+  assert.equal(knowledge.list("u1").length, 1);
+
+  assert.deepEqual(parseWorkspaceLink("http://localhost:3001/workspace/my-notes/t/abc"), { baseUrl: "http://localhost:3001", workspace: "my-notes" });
+  assert.deepEqual(parseWorkspaceLink("kb.example.com", "Research"), { baseUrl: "http://kb.example.com", workspace: "Research" });
+  assert.deepEqual(htmlToText("<html><title>Hi &amp; bye</title><script>x()</script><p>One</p><p>Two&nbsp;three</p></html>"), { title: "Hi & bye", text: "One\nTwo three" });
+  assert.ok(split("a".repeat(5000)).every((c) => c.length <= 1200));
+
+  // In a discussion, the panel is given the passages and the moderator's note says so.
+  const store = new EventStore(db);
+  const kb2 = new KnowledgeStore(settings, dir);
+  await kb2.add(user, { kind: "file", name: "Pricing memo", fileName: "p.txt", mimeType: "text/plain", data: Buffer.from("Our floor price is 40 dollars per seat.").toString("base64") });
+  const seen: string[] = [];
+  class Spy extends MockProvider {
+    override async complete(r: CompletionRequest) {
+      if (r.purpose === "chat" || r.purpose === "answer") seen.push(r.messages.at(-1)!.content);
+      return super.complete(r);
+    }
+  }
+  const engine = new CouncilEngine({ store, providers: new ProviderRegistry([new Spy()], { maxRetries: 0 }), settings, search: new WebSearch({}), knowledge: kb2, obsidianVaultPath: null });
+  engine.saveCouncil(council(), "u1");
+  const id = engine.createConversation(undefined, "general", "u1", "chat");
+  await engine.chat(id, "What discount can we offer?", { userId: "u1" });
+  await discussionIdle(engine, store, id);
+  assert.deepEqual(store.require(id).notes[0].knowledge, ["Pricing memo"]);
+  assert.match(seen[0], /floor price is 40 dollars/);
+
+  const caseId = engine.createConversation(undefined, "general", "u1");
+  await engine.sendMessage(caseId, "What discount can we offer on a 200-seat deal next quarter?", { userId: "u1" });
+  await engine.idle();
+  assert.equal(store.require(caseId).turns[0].research[0].title, "Pricing memo");
+  assert.match(seen.at(-1)!, /Pricing memo \(knowledge base\)/);
+  fs.rmSync(dir, { recursive: true, force: true });
 });

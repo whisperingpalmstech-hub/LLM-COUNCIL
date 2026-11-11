@@ -5,7 +5,9 @@ import {
   CASE_MODES,
   DEPTH_ROUNDS,
   DEPTHS,
+  DEFAULT_DISCUSSION,
   PROVIDER_IDS,
+  SPEECH_LENGTHS,
   depthCycles,
   type CaseContext,
   type CaseMode,
@@ -14,6 +16,9 @@ import {
   type CouncilMember,
   type IntakeQuestion,
   type Depth,
+  type DiscussionSettings,
+  type Persona,
+  type SearchResult,
   type Stage1Response,
   type Stage2Review,
   type Turn,
@@ -22,12 +27,13 @@ import {
 import type { Settings } from "../db/database.ts";
 import type { EventStore } from "../events/store.ts";
 import { writeTurnToVault } from "../integrations/obsidian.ts";
+import type { KnowledgeStore } from "../integrations/knowledge.ts";
 import type { WebSearch } from "../integrations/search.ts";
 import { errorMessage } from "../providers/http.ts";
 import type { ProviderRegistry } from "../providers/registry.ts";
 import type { ImageInput } from "../providers/types.ts";
 import { extractJson, normalizeBrief } from "./brief.ts";
-import { chatSystem, chatTurnPrompt, MAX_REPLIES, mentioned, moderatorPrompt, wrapUpPrompt } from "./discussion.ts";
+import { castingPrompt, chatSystem, chatTurnPrompt, mentioned, moderatorPrompt, nameOf, normalizePersonas, wrapUpPrompt } from "./discussion.ts";
 import { aboutBlock, answerSystem, briefPrompt, buildContext, clarifyPrompt, classifyPrompt, questionBlock, revisePrompt, reviewPrompt, synthesisPrompt, type TurnContext } from "./prompts.ts";
 import { aggregateRankings, assignLabels, parseRanking } from "./ranking.ts";
 import { CLASSIFIER, RECIPES } from "./recipes.ts";
@@ -41,6 +47,8 @@ export interface EngineDeps {
   providers: ProviderRegistry;
   settings: Settings;
   search: WebSearch;
+  /** The user's knowledge bases, searched for every case and discussion. */
+  knowledge?: KnowledgeStore;
   obsidianVaultPath: string | null;
   /** Where attachments live, so images can be shown to the models. */
   uploadsDir?: string;
@@ -52,6 +60,8 @@ export interface EngineDeps {
 export interface SendOptions {
   override?: Partial<CouncilConfig>;
   depth?: Depth;
+  /** Discuss mode: rounds for this exchange (defaults to the user's setting). */
+  rounds?: number;
   timezone?: string;
   profile?: UserProfile | null;
   userId?: string;
@@ -86,7 +96,7 @@ export class CouncilEngine {
     // Re-validate so councils saved by older versions pick up new defaults.
     if (saved?.members?.length) return validateCouncil(saved);
     const { members, chairman } = this.deps.providers.defaultCouncil(this.deps.env);
-    return { auto: this.autoAvailable(), depth: "standard", members, chairman, clarify: true, brief: true, webSearch: Boolean(this.deps.search.provider()) };
+    return { auto: this.autoAvailable(), depth: "standard", members, chairman, clarify: true, brief: true, webSearch: Boolean(this.deps.search.provider()), discussion: DEFAULT_DISCUSSION };
   }
 
   saveCouncil(input: CouncilConfig, userId?: string): CouncilConfig {
@@ -187,9 +197,74 @@ export class CouncilEngine {
       this.deps.store.append({ type: "conversation.renamed", conversationId, title: cleanTitle(body) });
     }
     const message: ChatMessage = { id: crypto.randomUUID(), author: { kind: "user" }, text: body, at: new Date().toISOString() };
+    const first = !conversation.chat.length;
     this.deps.store.append({ type: "chat.message", conversationId, message });
+    // The cast is being chosen or is waiting for approval: the debate starts once the user confirms it.
+    if (conversation.personaStatus === "casting" || conversation.personaStatus === "proposed") return;
     // Already discussing: the running loop sees the new message and lets the panel respond to it.
+    if (this.discussions.has(conversationId)) return;
+    if (first && !conversation.personaStatus && this.council(options.userId).discussion.personas) this.startCasting(conversationId, options);
+    else this.startDiscussion(conversationId, options);
+  }
+
+  /** Ask the moderator for a different cast (optionally steered by a hint) while the first one awaits approval. */
+  recast(conversationId: string, hint: string, options: SendOptions = {}): void {
+    const conversation = this.deps.store.require(conversationId);
+    if (conversation.kind !== "chat") throw badRequest("This case isn't a discussion.");
+    if (conversation.personaStatus !== "proposed") throw badRequest("The panel can only be recast before the debate starts.");
+    this.startCasting(conversationId, options, hint);
+  }
+
+  /** The user approved (and maybe edited) the cast: start the debate. An empty list means no personas. */
+  confirmPersonas(conversationId: string, personas: unknown, options: SendOptions = {}): void {
+    const conversation = this.deps.store.require(conversationId);
+    if (conversation.kind !== "chat") throw badRequest("This case isn't a discussion.");
+    if (conversation.personaStatus !== "proposed") throw badRequest("There is no proposed panel to confirm.");
+    const members = this.resolve(this.council(options.userId), conversation.mode).members;
+    const confirmed = Array.isArray(personas) && personas.length ? normalizePersonas(personas, members) : [];
+    this.deps.store.append({ type: "chat.personas_confirmed", conversationId, personas: confirmed });
     if (!this.discussions.has(conversationId)) this.startDiscussion(conversationId, options);
+  }
+
+  private startCasting(conversationId: string, options: SendOptions, hint = ""): void {
+    const { store, providers } = this.deps;
+    const controller = new AbortController();
+    this.discussions.set(conversationId, controller);
+    store.append({ type: "chat.casting", conversationId });
+    store.append({ type: "chat.busy", conversationId, busy: true });
+    void (async () => {
+      const conversation = store.require(conversationId);
+      const council = this.resolve(this.council(options.userId), conversation.mode);
+      const about = aboutBlock({ date: todayIn(options.timezone), ...(options.timezone ? { timezone: options.timezone } : {}), ...(options.profile ? { profile: options.profile } : {}) });
+      const question = conversation.chat.filter((m) => m.author.kind === "user").map((m) => m.text).join("\n\n");
+      let personas: Persona[] = [];
+      try {
+        // A fast model: the user is waiting to see the cast.
+        const caster = this.autoAvailable() ? CLASSIFIER : council.chairman;
+        // Each persona is shown as soon as the moderator has finished writing it.
+        let sent = 0;
+        const onText = (text: string) => {
+          const done = partialPersonas(text);
+          if (done.length === sent) return;
+          sent = done.length;
+          store.publishDraft({ type: "draft", conversationId, turnId: "chat", key: "cast", text: JSON.stringify(normalizePersonas(done, council.members.slice(0, done.length))) });
+        };
+        const reply = await providers.complete(caster, { purpose: "cast", effort: "none", json: true, messages: [{ role: "user", content: castingPrompt(about, question, council.members, conversation.mode, hint) }], signal: controller.signal, onText });
+        personas = normalizePersonas((extractJson(reply) as { personas?: unknown }).personas, council.members);
+      } catch (error) {
+        if (!controller.signal.aborted) console.warn("[discuss] casting failed:", errorMessage(error));
+      }
+      this.discussions.delete(conversationId);
+      // Stopped, or the moderator couldn't cast everyone: carry on without personas rather than block the user.
+      if (controller.signal.aborted || personas.length !== council.members.length) {
+        store.append({ type: "chat.personas_confirmed", conversationId, personas: [] });
+        if (controller.signal.aborted) store.append({ type: "chat.busy", conversationId, busy: false });
+        else this.startDiscussion(conversationId, options);
+        return;
+      }
+      store.append({ type: "chat.personas_proposed", conversationId, personas });
+      store.append({ type: "chat.busy", conversationId, busy: false });
+    })();
   }
 
   stopDiscussion(conversationId: string): void {
@@ -231,73 +306,90 @@ export class CouncilEngine {
     const conversation = store.require(conversationId);
     const council = this.resolve(this.council(options.userId), conversation.mode);
     const members = council.members;
-    const budget = MAX_REPLIES[options.depth ?? council.depth];
+    const settings = council.discussion;
+    const personas = conversation.personas.filter((p) => members.some((m) => m.id === p.memberId));
+    const rounds = clampInt(options.rounds ?? settings.rounds, 1, 6, DEFAULT_DISCUSSION.rounds);
+    const perRound = Math.min(settings.speakersPerRound, members.length);
     const about = aboutBlock({ date: todayIn(options.timezone), ...(options.timezone ? { timezone: options.timezone } : {}), ...(options.profile ? { profile: options.profile } : {}) });
     const moderator = this.autoAvailable() ? CLASSIFIER : council.chairman;
-    const userCount = () => store.require(conversationId).chat.filter((m) => m.author.kind === "user").length;
-    let seenUsers = userCount();
-    let replies = 0;
+    const userMessages = () => store.require(conversationId).chat.filter((m) => m.author.kind === "user");
+    let seenUsers = userMessages().length;
+    let round = 1;
+    let knowledge: SearchResult[] | null = null;
 
-    while (!signal.aborted) {
+    while (!signal.aborted && round <= rounds) {
       const chat = store.require(conversationId).chat;
       const last = chat.at(-1);
       // Who speaks: explicit @mentions win; otherwise the moderator decides.
-      let speakers: CouncilMember[] = [];
-      let reason = "";
-      const tagged = last?.author.kind === "user" ? mentioned(last.text, members) : [];
-      if (tagged.length) {
-        speakers = tagged;
-        reason = "You asked them directly";
-      } else {
-        try {
-          const reply = await providers.complete(moderator, { purpose: "moderate", json: true, messages: [{ role: "user", content: moderatorPrompt(about, members, chat, replies, budget, resumed && replies === 0) }], signal });
-          const parsed = extractJson(reply) as { speakers?: unknown; reason?: unknown };
-          const ids = Array.isArray(parsed.speakers) ? parsed.speakers.map(String) : [];
-          speakers = ids.map((id) => members.find((m) => m.id === id)).filter((m): m is CouncilMember => Boolean(m));
-          speakers = [...new Set(speakers)].slice(0, replies === 0 && !resumed ? 3 : 2);
-          reason = typeof parsed.reason === "string" ? parsed.reason.slice(0, 120) : "";
-        } catch (error) {
-          if (signal.aborted) return;
-          console.warn("[discuss] moderator failed:", errorMessage(error));
-          // Without a moderator, let the first two panellists answer the user, then stop.
-          speakers = replies === 0 ? members.slice(0, 2) : [];
-          reason = "";
-        }
-      }
+      const tagged = last?.author.kind === "user" ? mentioned(last.text, members, personas) : [];
+      const picking = tagged.length
+        ? Promise.resolve({ speakers: tagged, reason: "You asked them directly" })
+        : this.pickSpeakers(moderator, moderatorPrompt(about, members, personas, chat, { round, of: rounds, speakers: perRound, resumed: resumed && round === 1 }), members, perRound, round === 1, signal);
+      // Knowledge is looked up once per user message, while the moderator is choosing.
+      const lookup: Promise<SearchResult[]> = knowledge
+        ? Promise.resolve(knowledge)
+        : (this.deps.knowledge?.search(conversation.ownerId ?? options.userId, userMessages().slice(-2).map((m) => m.text).join("\n"), signal).catch((error) => (console.warn("[discuss] knowledge lookup failed:", errorMessage(error)), [])) ?? Promise.resolve([]));
+      const [{ speakers, reason }, found] = await Promise.all([picking, lookup]);
+      if (signal.aborted) return;
+      const fresh = knowledge === null;
+      knowledge = found;
       if (!speakers.length) break;
-      store.append({ type: "chat.moderated", conversationId, note: { id: crypto.randomUUID(), speakers: speakers.map((s) => s.id), reason, at: new Date().toISOString() } });
+      store.append({
+        type: "chat.moderated",
+        conversationId,
+        note: { id: crypto.randomUUID(), speakers: speakers.map((s) => s.id), reason, at: new Date().toISOString(), round, of: rounds, ...(fresh && found.length ? { knowledge: [...new Set(found.map((k) => k.title.split(": ")[0]))] } : {}) }
+      });
 
       for (const speaker of speakers) {
-        if (signal.aborted || replies >= budget) break;
-        const draft = throttle((text: string) => store.publishDraft({ type: "draft", conversationId, turnId: "chat", key: `chat:${speaker.id}`, text }), 120);
+        if (signal.aborted) return;
+        const draft = throttle((text: string) => store.publishDraft({ type: "draft", conversationId, turnId: "chat", key: `chat:${speaker.id}`, text }), 80);
         const latest = store.require(conversationId).chat;
+        const persona = personas.find((p) => p.memberId === speaker.id);
+        const author = { kind: "model" as const, memberId: speaker.id, label: speaker.label, provider: speaker.provider, model: speaker.model, ...(persona ? { persona: persona.name } : {}) };
         let message: ChatMessage;
         try {
           const text = await providers.complete(speaker, {
             purpose: "chat",
-            system: chatSystem(speaker, members.filter((m) => m.id !== speaker.id), conversation.mode, about),
-            messages: [{ role: "user", content: chatTurnPrompt(latest, speaker) }],
+            // A live conversation: answer promptly. The wrap-up and council cases still think at full depth.
+            effort: "low",
+            system: chatSystem(speaker, members.filter((m) => m.id !== speaker.id).map((m) => nameOf(m, personas)), conversation.mode, about, { persona, speechLength: settings.speechLength }),
+            messages: [{ role: "user", content: chatTurnPrompt(latest, nameOf(speaker, personas), knowledge) }],
             signal,
             onText: draft
           });
-          message = { id: crypto.randomUUID(), author: { kind: "model", memberId: speaker.id, label: speaker.label, provider: speaker.provider, model: speaker.model }, text, at: new Date().toISOString() };
+          message = { id: crypto.randomUUID(), author, text, at: new Date().toISOString() };
         } catch (error) {
           if (signal.aborted) return;
-          message = { id: crypto.randomUUID(), author: { kind: "model", memberId: speaker.id, label: speaker.label, provider: speaker.provider, model: speaker.model }, text: "", error: errorMessage(error), at: new Date().toISOString() };
+          message = { id: crypto.randomUUID(), author, text: "", error: errorMessage(error), at: new Date().toISOString() };
         }
         store.append({ type: "chat.message", conversationId, message });
-        replies++;
       }
-      // The user jumped in while the panel was talking: start a fresh round for their message.
-      if (userCount() > seenUsers) {
-        seenUsers = userCount();
-        replies = 0;
+      // The user jumped in while the panel was talking: start a fresh exchange for their message.
+      if (userMessages().length > seenUsers) {
+        seenUsers = userMessages().length;
+        round = 1;
         resumed = false;
+        knowledge = null;
         continue;
       }
-      if (replies >= budget) break;
+      round++;
     }
   }
+
+  private async pickSpeakers(moderator: CouncilMember, prompt: string, members: CouncilMember[], limit: number, opening: boolean, signal: AbortSignal): Promise<{ speakers: CouncilMember[]; reason: string }> {
+    try {
+      const reply = await this.deps.providers.complete(moderator, { purpose: "moderate", effort: "none", json: true, messages: [{ role: "user", content: prompt }], signal });
+      const parsed = extractJson(reply) as { speakers?: unknown; reason?: unknown };
+      const ids = Array.isArray(parsed.speakers) ? parsed.speakers.map(String) : [];
+      const speakers = [...new Set(ids.map((id) => members.find((m) => m.id === id)).filter((m): m is CouncilMember => Boolean(m)))].slice(0, Math.max(1, limit));
+      return { speakers, reason: typeof parsed.reason === "string" ? parsed.reason.slice(0, 120) : "" };
+    } catch (error) {
+      if (!signal.aborted) console.warn("[discuss] moderator failed:", errorMessage(error));
+      // Without a moderator, let the first panellists answer the user, then stop.
+      return { speakers: opening && !signal.aborted ? members.slice(0, Math.max(1, Math.min(2, limit))) : [], reason: "" };
+    }
+  }
+
 
   answerClarification(conversationId: string, answer: string): void {
     const turn = this.deps.store.require(conversationId).turns.at(-1);
@@ -323,6 +415,11 @@ export class CouncilEngine {
         this.deps.store.append({ type: "turn.failed", conversationId: conversation.id, turnId: turn.id, error: "Interrupted by a server restart. Send the message again to retry." });
         count++;
       }
+      // A cast that was being chosen is lost with the process; let the discussion carry on without one.
+      if (conversation.personaStatus === "casting" && !this.discussions.has(conversation.id)) {
+        this.deps.store.append({ type: "chat.personas_confirmed", conversationId: conversation.id, personas: [] });
+      }
+      if (conversation.chatBusy && !this.discussions.has(conversation.id)) this.deps.store.append({ type: "chat.busy", conversationId: conversation.id, busy: false });
     }
     return count;
   }
@@ -382,14 +479,13 @@ export class CouncilEngine {
     }
 
     // Optional web research shared by every member.
-    if (turn.council.webSearch && search.provider() && !turn.research.length) {
-      stage("research");
-      try {
-        const results = await search.search(turn.prompt, signal);
-        emit({ type: "turn.research_completed", conversationId, turnId, results });
-      } catch (error) {
-        console.warn("[council] web search failed:", errorMessage(error));
-      }
+    if (!turn.research.length) {
+      const web = turn.council.webSearch && search.provider() ? search.search(turn.prompt, signal).catch((error) => (console.warn("[council] web search failed:", errorMessage(error)), [] as SearchResult[])) : null;
+      const owner = store.require(conversationId).ownerId;
+      const kb = this.deps.knowledge && owner ? this.deps.knowledge.search(owner, turn.prompt, signal).catch((error) => (console.warn("[council] knowledge lookup failed:", errorMessage(error)), [] as SearchResult[])) : null;
+      if (web) stage("research");
+      const results = [...((await kb) ?? []), ...((await web) ?? [])];
+      if (results.length) emit({ type: "turn.research_completed", conversationId, turnId, results });
     }
     if (signal.aborted) return;
 
@@ -709,8 +805,38 @@ function validateCouncil(input: CouncilConfig): CouncilConfig {
     chairman: validateMember(input.chairman),
     clarify: Boolean(input.clarify),
     brief: input.brief !== false,
-    webSearch: Boolean(input.webSearch)
+    webSearch: Boolean(input.webSearch),
+    discussion: validateDiscussion(input.discussion)
   };
+}
+
+/** Complete persona objects in a JSON reply that is still being written. */
+function partialPersonas(text: string): unknown[] {
+  const out: unknown[] = [];
+  for (const match of text.slice(text.indexOf("[") + 1).matchAll(/\{[^{}]*\}/g)) {
+    try {
+      out.push(JSON.parse(match[0]));
+    } catch {
+      break;
+    }
+  }
+  return out;
+}
+
+function validateDiscussion(input: Partial<DiscussionSettings> | undefined): DiscussionSettings {
+  const d = input && typeof input === "object" ? input : {};
+  return {
+    personas: d.personas === undefined ? DEFAULT_DISCUSSION.personas : Boolean(d.personas),
+    rounds: clampInt(d.rounds, 1, 6, DEFAULT_DISCUSSION.rounds),
+    speakersPerRound: clampInt(d.speakersPerRound, 1, 8, DEFAULT_DISCUSSION.speakersPerRound),
+    speechLength: SPEECH_LENGTHS.includes(d.speechLength as never) ? d.speechLength! : DEFAULT_DISCUSSION.speechLength,
+    voice: d.voice === "economy" ? "economy" : "natural"
+  };
+}
+
+function clampInt(value: unknown, min: number, max: number, fallback: number): number {
+  const n = Math.round(Number(value));
+  return Number.isFinite(n) ? Math.min(max, Math.max(min, n)) : fallback;
 }
 
 function validateMember(m: CouncilMember): CouncilMember {

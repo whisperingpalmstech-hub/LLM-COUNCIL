@@ -59,6 +59,8 @@ export class OpenAiCompatibleProvider implements Provider {
         messages,
         ...(request.json && supportsJsonMode ? { response_format: { type: "json_object" } } : {}),
         ...(request.onText ? { stream: true } : {}),
+        // OpenRouter's unified reasoning control; other OpenAI-compatible servers may reject the field.
+        ...(request.effort && this.id === "openrouter" ? { reasoning: request.effort === "none" ? { enabled: false } : { effort: request.effort } } : {}),
         ...extraBody
       }
     };

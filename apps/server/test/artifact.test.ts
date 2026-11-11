@@ -33,7 +33,7 @@ const turn = {
   attachments: [],
   status: "completed",
   stage: null,
-  council: { auto: true, depth: "standard", members: [{ id: "g", label: "GPT-6.1 Terra", provider: "openrouter", model: "openai/gpt-6.1-terra" }], chairman: { id: "c", label: "Claude Opus 5.5", provider: "openrouter", model: "anthropic/claude-opus-5.5" }, clarify: true, brief: true, webSearch: false },
+  council: { auto: true, depth: "standard", members: [{ id: "g", label: "GPT-6.1 Terra", provider: "openrouter", model: "openai/gpt-6.1-terra" }], chairman: { id: "c", label: "Claude Opus 5.5", provider: "openrouter", model: "anthropic/claude-opus-5.5" }, clarify: true, brief: true, webSearch: false, discussion: { personas: false, rounds: 3, speakersPerRound: 3, speechLength: "short", voice: "natural" } },
   rounds: 5,
   cycle: 2,
   research: [],

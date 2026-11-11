@@ -1,6 +1,6 @@
 import type { ProviderId } from "@synod/contracts";
 
-export type CompletionPurpose = "clarify" | "answer" | "review" | "synthesis" | "brief" | "moderate" | "chat";
+export type CompletionPurpose = "clarify" | "answer" | "review" | "synthesis" | "brief" | "moderate" | "cast" | "chat";
 
 export interface ImageInput {
   mimeType: string;
@@ -23,6 +23,12 @@ export interface CompletionRequest {
   json?: boolean;
   purpose: CompletionPurpose;
   signal?: AbortSignal;
+  /**
+   * Trade thinking time for speed where the user is waiting on a short reply:
+   * "none" for routing calls (who speaks next), "low" for live debate turns.
+   * Providers that can't control reasoning ignore it.
+   */
+  effort?: "none" | "low";
   /** When set, the provider streams and calls this with the full text so far. */
   onText?: (textSoFar: string) => void;
 }

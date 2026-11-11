@@ -8,6 +8,7 @@ import type {
   ChatMessage,
   IntakeQuestion,
   ModeratorNote,
+  Persona,
   CaseMode,
   Conversation,
   CouncilConfig,
@@ -28,6 +29,9 @@ export type ConversationEvent =
   | E<"chat.message", { message: ChatMessage }>
   | E<"chat.moderated", { note: ModeratorNote }>
   | E<"chat.busy", { busy: boolean }>
+  | E<"chat.casting", {}>
+  | E<"chat.personas_proposed", { personas: Persona[] }>
+  | E<"chat.personas_confirmed", { personas: Persona[] }>
   | E<"conversation.mode_changed", { mode: CaseMode }>
   | E<"conversation.renamed", { title: string }>
   | E<"conversation.archived", { archived: boolean }>
@@ -70,7 +74,7 @@ export interface DraftPush {
 export type ServerPush = { type: "event"; event: ConversationEvent } | DraftPush;
 
 export function emptyConversation(id: string): Conversation {
-  return { id, kind: "council", chat: [], notes: [], chatBusy: false, title: "", mode: "general", archived: false, createdAt: "", updatedAt: "", pendingAttachments: [], turns: [], seq: 0 };
+  return { id, kind: "council", chat: [], notes: [], chatBusy: false, personas: [], title: "", mode: "general", archived: false, createdAt: "", updatedAt: "", pendingAttachments: [], turns: [], seq: 0 };
 }
 
 export function applyEvent(state: Conversation, event: ConversationEvent): Conversation {
@@ -101,6 +105,17 @@ export function applyEvent(state: Conversation, event: ConversationEvent): Conve
     case "chat.busy":
       next.chatBusy = event.busy;
       next.createdAt = event.at;
+      break;
+    case "chat.casting":
+      next.personaStatus = "casting";
+      break;
+    case "chat.personas_proposed":
+      next.personas = event.personas;
+      next.personaStatus = "proposed";
+      break;
+    case "chat.personas_confirmed":
+      next.personas = event.personas;
+      next.personaStatus = "confirmed";
       break;
     case "conversation.mode_changed":
       next.mode = event.mode;

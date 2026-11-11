@@ -1,6 +1,6 @@
 import { Crown, Plus, Trash2 } from "lucide-react";
 import { useEffect, useState } from "react";
-import { CASE_MODES, DEPTH_ROUNDS, DEPTHS, PROVIDER_IDS, type CaseMode, type CouncilConfig, type CouncilMember, type ProviderId, type ServerInfo } from "@synod/contracts";
+import { CASE_MODES, DEFAULT_DISCUSSION, DEPTH_ROUNDS, DEPTHS, PROVIDER_IDS, SPEECH_LENGTHS, SPEECH_WORDS, type DiscussionSettings, type CaseMode, type CouncilConfig, type CouncilMember, type ProviderId, type ServerInfo } from "@synod/contracts";
 import { MODE_UI } from "~/lib/modes";
 import { DEPTH_UI } from "./DepthPicker";
 import { api } from "~/lib/api";
@@ -9,6 +9,14 @@ import { Button } from "./ui/button";
 import { Dialog } from "./ui/dialog";
 import { ModelLogo } from "./ModelLogo";
 import { SectionTitle } from "./ui/misc";
+import { KnowledgeSettings } from "./KnowledgeSettings";
+
+const TABS = [
+  ["council", "Council"],
+  ["debates", "Debates"],
+  ["knowledge", "Knowledge"]
+] as const;
+type Tab = (typeof TABS)[number][0];
 
 const PRESETS: { name: string; note: string; members: [string, string][]; chairman: string }[] = [
   {
@@ -29,6 +37,7 @@ export function SettingsDialog({ open, onOpenChange, info }: { open: boolean; on
   const [council, setCouncil] = useState<CouncilConfig | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [saved, setSaved] = useState(false);
+  const [tab, setTab] = useState<Tab>("council");
   const [recipes, setRecipes] = useState<Awaited<ReturnType<typeof api.recipes>> | null>(null);
 
   useEffect(() => {
@@ -55,11 +64,30 @@ export function SettingsDialog({ open, onOpenChange, info }: { open: boolean; on
   };
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange} title="Council settings" description="Synod picks strong models for you. Change them only if you want to.">
-      {!council ? (
+    <Dialog open={open} onOpenChange={onOpenChange} title="Settings" description="Synod picks strong models for you. Change them only if you want to.">
+      <div className="mb-5 grid grid-cols-3 gap-1 rounded-xl bg-muted p-1" role="tablist">
+        {TABS.map(([id, label]) => (
+          <button
+            key={id}
+            type="button"
+            role="tab"
+            aria-selected={tab === id}
+            onClick={() => setTab(id)}
+            className={cn("h-8 cursor-pointer rounded-lg text-sm transition-[background-color,color,box-shadow] duration-150", tab === id ? "bg-card font-medium shadow-[0_1px_3px_rgb(0_0_0/10%)]" : "text-muted-foreground hover:text-foreground")}
+          >
+            {label}
+          </button>
+        ))}
+      </div>
+      {tab === "knowledge" ? (
+        <KnowledgeSettings />
+      ) : !council ? (
         <p className="text-muted-foreground text-sm">{error ?? "Loading…"}</p>
       ) : (
         <div className="flex flex-col gap-6">
+          {tab === "debates" && <DebateSettings value={council.discussion ?? DEFAULT_DISCUSSION} members={council.members.length} speech={Boolean(info?.speech?.available)} onChange={(discussion) => update({ discussion })} />}
+          {tab === "council" && (
+          <>
           <div>
             <SectionTitle>Who sits on the council</SectionTitle>
             <div className="mt-2 grid gap-2 sm:grid-cols-2" role="radiogroup">
@@ -219,14 +247,16 @@ export function SettingsDialog({ open, onOpenChange, info }: { open: boolean; on
                 checked={council.webSearch}
                 disabled={!info?.search.configured}
                 onChange={(v) => update({ webSearch: v })}
-                label={`Web search${info?.search.configured ? ` (${info.search.provider})` : " (needs TAVILY_API_KEY or PERPLEXITY_API_KEY)"}`}
+                label={`Web search${info?.search.configured ? ` (${info.search.provider})` : " (needs EXA_API_KEY on the server)"}`}
               />
             </div>
           </div>
+          </>
+          )}
 
           <div className="flex items-center justify-end gap-2 border-t pt-4">
             {error && <p className="mr-auto text-error-foreground text-xs">{error}</p>}
-            {saved && <p className="mr-auto text-success-foreground text-xs">Saved. New cases use this council.</p>}
+            {saved && <p className="mr-auto text-success-foreground text-xs">Saved. New cases and debates use these settings.</p>}
             <Button variant="ghost-muted" onClick={() => onOpenChange(false)}>
               Close
             </Button>
@@ -248,7 +278,7 @@ function MemberRow({ member, configured, onChange, onRemove }: { member: Council
         <input className={cn(field, "w-full pl-9")} aria-label="Name" value={member.label} onChange={(e) => onChange({ label: e.target.value })} />
       </div>
       <select className={cn(field, "order-3 sm:order-none")} aria-label="Provider" value={member.provider} onChange={(e) => onChange({ provider: e.target.value as ProviderId })}>
-        {PROVIDER_IDS.map((p) => (
+        {[...PROVIDER_IDS].sort((a, b) => Number(b === "openrouter") - Number(a === "openrouter")).map((p) => (
           <option key={p} value={p}>
             {p}
             {configured(p) ? "" : " ·off"}
@@ -282,5 +312,79 @@ function Toggle({ checked, onChange, label, disabled }: { checked: boolean; onCh
       </button>
       {label}
     </label>
+  );
+}
+
+function Segmented<T extends string | number>({ value, options, onChange, label }: { value: T; options: { value: T; label: string; hint?: string }[]; onChange: (value: T) => void; label: string }) {
+  return (
+    <div className="mt-2 grid gap-1 rounded-xl bg-muted p-1" style={{ gridTemplateColumns: `repeat(${options.length}, minmax(0, 1fr))` }} role="radiogroup" aria-label={label}>
+      {options.map((o) => (
+        <button
+          key={String(o.value)}
+          type="button"
+          role="radio"
+          aria-checked={value === o.value}
+          onClick={() => onChange(o.value)}
+          className={cn("cursor-pointer rounded-lg px-2 py-1.5 text-center transition-[background-color,box-shadow,color] duration-150", value === o.value ? "bg-card shadow-[0_1px_3px_rgb(0_0_0/10%)]" : "text-muted-foreground hover:text-foreground")}
+        >
+          <span className="block font-medium text-sm tabular-nums">{o.label}</span>
+          {o.hint && <span className="block text-2xs text-muted-foreground">{o.hint}</span>}
+        </button>
+      ))}
+    </div>
+  );
+}
+
+function DebateSettings({ value, members, speech, onChange }: { value: DiscussionSettings; members: number; speech: boolean; onChange: (value: DiscussionSettings) => void }) {
+  const set = (patch: Partial<DiscussionSettings>) => onChange({ ...value, ...patch });
+  const speakers = Math.min(value.speakersPerRound, Math.max(1, members));
+  const speeches = value.rounds * speakers;
+  const minutes = (speeches * SPEECH_WORDS[value.speechLength]) / 150;
+  // Natural voices cost about $0.04 per 1,000 characters; economy about a hundredth of that.
+  const cost = speeches * SPEECH_WORDS[value.speechLength] * 6 * (value.voice === "natural" ? 0.00004 : 0.0000007);
+  return (
+    <>
+      <div>
+        <SectionTitle>Personas</SectionTitle>
+        <div className="mt-2">
+          <Toggle checked={value.personas} onChange={(personas) => set({ personas })} label="The moderator casts a persona for each model, and you approve the panel before the debate starts" />
+        </div>
+      </div>
+      <div>
+        <SectionTitle>Rounds</SectionTitle>
+        <p className="mt-0.5 text-muted-foreground text-xs">How many rounds the panel talks before it's your turn. The moderator ends early once they agree.</p>
+        <Segmented label="Rounds" value={value.rounds} onChange={(rounds) => set({ rounds })} options={[1, 2, 3, 4, 5, 6].map((n) => ({ value: n, label: String(n) }))} />
+      </div>
+      <div>
+        <SectionTitle>Speakers in each round</SectionTitle>
+        <Segmented label="Speakers in each round" value={value.speakersPerRound >= 8 ? 8 : value.speakersPerRound} onChange={(speakersPerRound) => set({ speakersPerRound })} options={[...[1, 2, 3, 4].map((n) => ({ value: n, label: String(n) })), { value: 8, label: "Everyone" }]} />
+      </div>
+      <div>
+        <SectionTitle>Length of each speech</SectionTitle>
+        <Segmented
+          label="Length of each speech"
+          value={value.speechLength}
+          onChange={(speechLength) => set({ speechLength })}
+          options={SPEECH_LENGTHS.map((l) => ({ value: l, label: l[0].toUpperCase() + l.slice(1), hint: `about ${Math.round((SPEECH_WORDS[l] / 150) * 60 / 5) * 5} sec` }))}
+        />
+      </div>
+      <div>
+        <SectionTitle>Voices</SectionTitle>
+        <p className="mt-0.5 text-muted-foreground text-xs">{speech ? "Used when you listen at the table or on stage. Reading the chat costs nothing extra." : "Voices need an OpenRouter key on the server."}</p>
+        <Segmented
+          label="Voices"
+          value={value.voice}
+          onChange={(voice) => set({ voice })}
+          options={[
+            { value: "natural", label: "Natural", hint: "most lifelike" },
+            { value: "economy", label: "Economy", hint: "about 1% of the cost" }
+          ]}
+        />
+      </div>
+      <p className="rounded-2xl bg-muted px-3.5 py-2.5 text-muted-foreground text-xs">
+        With these settings an exchange has up to <span className="font-medium text-foreground">{speeches} speeches</span>, about <span className="font-medium text-foreground">{minutes < 1 ? "under a minute" : `${Math.round(minutes)} min`}</span> of listening
+        {speech ? `, and voices cost roughly ${cost < 0.01 ? "under 1¢" : `${Math.round(cost * 100)}¢`} if you listen to all of it.` : "."}
+      </p>
+    </>
   );
 }

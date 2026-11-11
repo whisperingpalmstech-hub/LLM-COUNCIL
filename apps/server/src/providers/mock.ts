@@ -69,11 +69,22 @@ export class MockProvider implements Provider {
       case "moderate": {
         const ids = [...prompt.matchAll(/- id: (\S+) \|/g)].map((m) => m[1]);
         const fresh = prompt.includes("The user just wrote");
+        if (/This is round 2 of/.test(prompt) && prompt.includes("MOCK_SECOND_ROUND")) return JSON.stringify({ speakers: ids.slice(-1), reason: "One more angle" });
         if (prompt.includes("keep discussing")) return JSON.stringify({ speakers: ids.slice(-1), reason: "Pushes the discussion forward" });
         return JSON.stringify(fresh ? { speakers: ids.slice(0, 2), reason: "Two different angles" } : { speakers: [], reason: "" });
       }
+      case "cast": {
+        const ids = [...prompt.matchAll(/- id: (\S+) \|/g)].map((m) => m[1]);
+        const cast = [
+          ["Maya Okafor", "Cautious specialist", "Move slowly until the evidence is in.", "measured", "sarah"],
+          ["Tom Reyes", "Pragmatic operator", "Ship the smallest thing that works.", "blunt", "george"],
+          ["Ines Duarte", "Risk advocate", "Someone has to speak for whoever bears the downside.", "pointed", "alice"],
+          ["Sam Whitlock", "Contrarian analyst", "The numbers don't say what everyone thinks.", "dry", "brian"]
+        ];
+        return JSON.stringify({ personas: ids.map((id, i) => ({ id, name: i < cast.length ? cast[i][0] : `Panellist ${i + 1}`, role: cast[i % cast.length][1], stance: cast[i % cast.length][2], style: cast[i % cast.length][3], voice: cast[i % cast.length][4] })) });
+      }
       case "chat": {
-        const lines = prompt.split("\n").filter((l) => /^[^:]{1,40}: /.test(l));
+        const lines = prompt.slice(prompt.indexOf("Discussion so far:")).split("\n").filter((l) => /^[^:]{1,40}: /.test(l));
         const previous = lines.at(-1)?.split(":")[0] ?? "everyone";
         return `[mock:${model}] Building on ${previous}: I'd test the riskiest assumption first.`;
       }

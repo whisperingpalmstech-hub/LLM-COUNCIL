@@ -1,6 +1,9 @@
 import type {
+  AddKnowledgeBaseRequest,
   Attachment,
   AuthConfigResponse,
+  KnowledgeBase,
+  Persona,
   LoginRequest,
   MeResponse,
   SignupRequest,
@@ -31,6 +34,7 @@ async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
   return res.json() as Promise<T>;
 }
 
+const tz = () => Intl.DateTimeFormat().resolvedOptions().timeZone;
 const post = <T>(path: string, body?: unknown) => request<T>(path, { method: "POST", body: JSON.stringify(body ?? {}) });
 
 export const api = {
@@ -40,8 +44,16 @@ export const api = {
   conversations: () => request<ConversationSummary[]>("/api/conversations"),
   conversation: (id: string) => request<Conversation>(`/api/conversations/${id}`),
   createConversation: (mode: CaseMode | "auto", kind: "council" | "chat" = "council") => post<Conversation>("/api/conversations", { mode, kind }),
-  chat: (id: string, text: string, depth?: Depth) => post(`/api/conversations/${id}/chat`, { text, depth, timezone: Intl.DateTimeFormat().resolvedOptions().timeZone }),
-  continueChat: (id: string, depth?: Depth) => post(`/api/conversations/${id}/chat/continue`, { depth, timezone: Intl.DateTimeFormat().resolvedOptions().timeZone }),
+  chat: (id: string, text: string, rounds?: number) => post(`/api/conversations/${id}/chat`, { text, rounds, timezone: tz() }),
+  continueChat: (id: string, rounds?: number) => post(`/api/conversations/${id}/chat/continue`, { rounds, timezone: tz() }),
+  confirmPersonas: (id: string, personas: Persona[], rounds?: number) => post(`/api/conversations/${id}/chat/personas`, { personas, rounds, timezone: tz() }),
+  recast: (id: string, hint: string) => post(`/api/conversations/${id}/chat/recast`, { hint, timezone: tz() }),
+  speechUrl: (id: string, messageId: string) => `/api/conversations/${id}/chat/${messageId}/speech`,
+  voiceSampleUrl: (voice: string) => `/api/speech/sample?voice=${encodeURIComponent(voice)}`,
+  knowledge: () => request<KnowledgeBase[]>("/api/knowledge"),
+  addKnowledge: (body: AddKnowledgeBaseRequest) => post<KnowledgeBase>("/api/knowledge", body),
+  updateKnowledge: (kbId: string, patch: { enabled?: boolean; name?: string }) => request<KnowledgeBase>(`/api/knowledge/${kbId}`, { method: "PATCH", body: JSON.stringify(patch) }),
+  removeKnowledge: (kbId: string) => request(`/api/knowledge/${kbId}`, { method: "DELETE" }),
   stopChat: (id: string) => post(`/api/conversations/${id}/chat/stop`),
   wrapUp: (id: string) => post<{ turnId: string }>(`/api/conversations/${id}/wrap-up`, { timezone: Intl.DateTimeFormat().resolvedOptions().timeZone }),
   updateConversation: (id: string, patch: { title?: string; archived?: boolean; mode?: CaseMode }) =>

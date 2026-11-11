@@ -39,7 +39,7 @@ export async function saveAttachment(
   };
 }
 
-async function extract(buffer: Buffer, mimeType: string, name: string): Promise<{ kind: Attachment["kind"]; text: string }> {
+export async function extract(buffer: Buffer, mimeType: string, name: string): Promise<{ kind: Attachment["kind"]; text: string }> {
   if (IMAGE_TYPES.test(mimeType)) return { kind: "image", text: "" };
   if (TEXT_TYPES.test(mimeType) || TEXT_EXTENSIONS.test(name)) return { kind: "text", text: buffer.toString("utf8") };
   try {
@@ -61,7 +61,7 @@ async function extract(buffer: Buffer, mimeType: string, name: string): Promise<
   return { kind: "other", text: "" };
 }
 
-function guessType(name: string): string {
+export function guessType(name: string): string {
   const ext = name.toLowerCase().split(".").pop() ?? "";
   return (
     ({ pdf: "application/pdf", docx: "application/vnd.openxmlformats-officedocument.wordprocessingml.document", png: "image/png", jpg: "image/jpeg", jpeg: "image/jpeg", webp: "image/webp", txt: "text/plain", md: "text/markdown" } as Record<string, string>)[ext] ??

@@ -38,6 +38,68 @@ export function depthCycles(depth: Depth): number {
   return (DEPTH_ROUNDS[depth] - 1) / 2;
 }
 
+/** How long each panellist speaks in a discussion. */
+export const SPEECH_LENGTHS = ["short", "medium", "long"] as const;
+export type SpeechLength = (typeof SPEECH_LENGTHS)[number];
+/** Rough word budget per speech, also used to estimate reading time. */
+export const SPEECH_WORDS: Record<SpeechLength, number> = { short: 50, medium: 110, long: 220 };
+
+/** Voices a persona can speak with. Synod maps each to a voice of the configured speech model. */
+export const VOICES = [
+  { id: "george", label: "George", tone: "warm, measured man" },
+  { id: "sarah", label: "Sarah", tone: "clear, confident woman" },
+  { id: "brian", label: "Brian", tone: "deep, steady man" },
+  { id: "alice", label: "Alice", tone: "crisp, precise woman" },
+  { id: "charlie", label: "Charlie", tone: "relaxed, friendly man" },
+  { id: "matilda", label: "Matilda", tone: "warm, thoughtful woman" },
+  { id: "daniel", label: "Daniel", tone: "authoritative man" },
+  { id: "jessica", label: "Jessica", tone: "lively, expressive woman" }
+] as const;
+export type VoiceId = (typeof VOICES)[number]["id"];
+
+/** The character a model plays in a discussion, cast by the moderator and approved by the user. */
+export interface Persona {
+  memberId: string;
+  /** e.g. "Dr. Maya Okafor" */
+  name: string;
+  /** e.g. "Sceptical epidemiologist" */
+  role: string;
+  /** The position this persona argues from, in one sentence. */
+  stance: string;
+  /** How they talk, e.g. "blunt, numbers first". */
+  style: string;
+  voice: VoiceId;
+}
+
+export interface DiscussionSettings {
+  /** The moderator casts a persona for each model before the debate starts. */
+  personas: boolean;
+  /** Rounds the panel talks before handing back to the user (1-6). */
+  rounds: number;
+  /** How many panellists speak in each round (1-8). */
+  speakersPerRound: number;
+  speechLength: SpeechLength;
+  /** Spoken voices: "natural" costs more per speech than "economy". */
+  voice: "natural" | "economy";
+}
+
+export const DEFAULT_DISCUSSION: DiscussionSettings = { personas: true, rounds: 3, speakersPerRound: 3, speechLength: "medium", voice: "natural" };
+
+/** A source the council can draw on. Content stays on the server; this is what the UI sees. */
+export interface KnowledgeBase {
+  id: string;
+  name: string;
+  kind: "file" | "link" | "anythingllm";
+  /** File name, URL, or "workspace on host". */
+  detail: string;
+  /** Used by new cases and discussions. */
+  enabled: boolean;
+  /** Characters of text held (files and links). */
+  chars?: number;
+  error?: string;
+  createdAt: string;
+}
+
 export interface CouncilConfig {
   /** Pick the best council for each case type automatically (members and chairman below are ignored). */
   auto: boolean;
@@ -51,6 +113,8 @@ export interface CouncilConfig {
   brief: boolean;
   /** Pull web search results into the prompt when a search key is configured. */
   webSearch: boolean;
+  /** Discuss mode: personas, rounds, and speech length. */
+  discussion: DiscussionSettings;
 }
 
 export interface Attachment {
@@ -68,8 +132,11 @@ export interface Attachment {
 
 export interface SearchResult {
   title: string;
+  /** Empty for knowledge-base passages without a link. */
   url: string;
   snippet: string;
+  /** Where it came from; absent means web search. */
+  source?: "web" | "knowledge";
 }
 
 export interface Stage1Response {
@@ -278,7 +345,8 @@ export type SignupMode = "first-user" | "invite" | "open" | "closed";
 /** One message in a Discuss (group chat) conversation. */
 export interface ChatMessage {
   id: string;
-  author: { kind: "user" } | { kind: "model"; memberId: string; label: string; provider: ProviderId; model: string };
+  /** `persona` is the character's name when the model spoke in role. */
+  author: { kind: "user" } | { kind: "model"; memberId: string; label: string; provider: ProviderId; model: string; persona?: string };
   text: string;
   at: string;
   error?: string;
@@ -290,6 +358,11 @@ export interface ModeratorNote {
   speakers: string[];
   reason: string;
   at: string;
+  /** Which round of the current exchange this opens, e.g. 2 of 3. */
+  round?: number;
+  of?: number;
+  /** Knowledge-base passages the panel was given for this round. */
+  knowledge?: string[];
 }
 
 export interface Conversation {
@@ -301,6 +374,9 @@ export interface Conversation {
   notes: ModeratorNote[];
   /** A model is replying (or about to). */
   chatBusy: boolean;
+  /** Discuss mode: the cast. "proposed" waits for the user to approve or edit before the debate starts. */
+  personas: Persona[];
+  personaStatus?: "casting" | "proposed" | "confirmed";
   /** Owning user. Absent on cases created before accounts existed (visible to admins). */
   ownerId?: string;
   title: string;
@@ -338,6 +414,8 @@ export interface ServerInfo {
   providers: ProviderStatus[];
   search: { configured: boolean; provider: string | null };
   voice: { available: boolean; engine: string | null };
+  /** Text-to-speech for the round table and stage views. */
+  speech: { available: boolean };
   obsidian: { enabled: boolean };
   hermes: { configured: boolean };
   publicBaseUrl: string | null;

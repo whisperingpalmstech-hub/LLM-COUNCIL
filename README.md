@@ -49,6 +49,11 @@ OpenAI, Anthropic, Gemini, DeepSeek, OpenRouter, SiliconFlow, Ollama, RouteLLM a
 | File attachments | 📎 button or paste. Text-like files are shared with the council (up to 20k characters each) |
 | Upload from phone | 📱 button shows a QR code with a signed link to that case (valid 12 hours). Set `PUBLIC_BASE_URL` when off-LAN |
 | Voice input | `OPENROUTER_API_KEY` (cheap `google/gemini-2.5-flash-lite`, with fallbacks), or local whisper.cpp, or `OPENAI_API_KEY` |
+| Debates with personas | Start a discussion. The moderator casts a persona for each model; you edit or approve the panel, then they debate. Turn off under Settings → Debates |
+| Round Table and Stage views | The view switcher at the top of a discussion. Avatars speak aloud; pause, skip, change speed, or raise your hand to interject |
+| Spoken voices | `OPENROUTER_API_KEY` (OpenRouter's speech endpoint). Natural or economy voices under Settings → Debates; `SPEECH_MODEL` to override |
+| Debate length | Settings → Debates: rounds, speakers per round, and speech length. Rounds can also be set per message |
+| Knowledge bases | Settings → Knowledge: files, web links, or AnythingLLM workspaces. Relevant passages are given to every debate and council case |
 | Obsidian notes | `OBSIDIAN_VAULT_PATH`: every completed answer is written as a note |
 | Hermes hand-off | `HERMES_WEBHOOK_URL`. Simulated when unset, and always needs a confirm click |
 | Continue with Google | `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET` (redirect URI `<PUBLIC_BASE_URL>/api/auth/google/callback`) |

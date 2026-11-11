@@ -62,6 +62,11 @@ class ClientStore {
             : event.type === "chat.message" && event.message.author.kind === "model"
               ? `chat:chat:${event.message.author.memberId}`
               : null;
+      // A new cast (or the final one) replaces the cards streamed so far.
+      if ((event.type === "chat.casting" || event.type === "chat.personas_proposed") && this.drafts.has("chat:cast")) {
+        this.drafts = new Map(this.drafts);
+        this.drafts.delete("chat:cast");
+      }
       if (finalKey && this.drafts.has(finalKey)) {
         this.drafts = new Map(this.drafts);
         this.drafts.delete(finalKey);

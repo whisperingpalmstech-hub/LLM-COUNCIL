@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { applyEvent, emptyConversation, type ConversationEvent, type CouncilConfig } from "../src/index.ts";
+import { applyEvent, DEFAULT_DISCUSSION, emptyConversation, type ConversationEvent, type CouncilConfig } from "../src/index.ts";
 
 const council: CouncilConfig = {
   auto: false,
@@ -9,7 +9,7 @@ const council: CouncilConfig = {
   chairman: { id: "a", label: "A", provider: "mock", model: "" },
   clarify: false,
   brief: false,
-  webSearch: false
+  webSearch: false, discussion: DEFAULT_DISCUSSION
 };
 const base = { conversationId: "c", at: "2026-01-01T00:00:00.000Z" };
 

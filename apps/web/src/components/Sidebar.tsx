@@ -144,7 +144,7 @@ function AccountMenu({ name, email, onSettings }: { name: string; email: string;
               </div>
               {onSettings && (
                 <Menu.Item className={item} onClick={onSettings}>
-                  <Settings2 /> Council settings
+                  <Settings2 /> Settings
                 </Menu.Item>
               )}
               <Menu.Item

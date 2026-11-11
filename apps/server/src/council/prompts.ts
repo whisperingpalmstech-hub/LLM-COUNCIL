@@ -37,7 +37,7 @@ export function questionBlock(ctx: TurnContext): string {
     ctx.about,
     ctx.history && `Earlier in this conversation:\n${ctx.history}`,
     ctx.attachments && `Attached material:\n${ctx.attachments}`,
-    ctx.research && `Web search results (may be incomplete; cite when used):\n${ctx.research}`,
+    ctx.research && `Reference material from web search and the user's knowledge bases (may be incomplete; cite when used):\n${ctx.research}`,
     `Question:\n${ctx.prompt}`,
     ctx.clarification
   ]
@@ -222,7 +222,7 @@ function attachmentsBlock(attachments: Attachment[]): string {
 }
 
 function researchBlock(results: SearchResult[]): string {
-  return results.map((r, i) => `[${i + 1}] ${r.title} — ${r.url}\n${truncate(r.snippet, 600)}`).join("\n\n");
+  return results.map((r, i) => `[${i + 1}] ${r.title}${r.url ? ` — ${r.url}` : ""}${r.source === "knowledge" ? " (knowledge base)" : ""}\n${truncate(r.snippet, r.source === "knowledge" ? 1500 : 600)}`).join("\n\n");
 }
 
 function truncate(text: string, max: number): string {

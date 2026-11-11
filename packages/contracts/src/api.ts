@@ -55,3 +55,9 @@ export interface TranscriptionResponse {
   text: string;
   engine: string;
 }
+
+/** Add a knowledge base: an uploaded file, a web link, or an AnythingLLM workspace. */
+export type AddKnowledgeBaseRequest =
+  | { kind: "file"; name?: string; fileName: string; mimeType: string; /** Base64, no data: prefix. */ data: string }
+  | { kind: "link"; name?: string; url: string }
+  | { kind: "anythingllm"; name?: string; /** Workspace link or server address. */ url: string; workspace?: string; apiKey?: string };

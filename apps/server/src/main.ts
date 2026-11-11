@@ -11,6 +11,8 @@ import { openDatabase, Settings } from "./db/database.ts";
 import { EventStore } from "./events/store.ts";
 import { createApp } from "./http/app.ts";
 import { attachWebSocket } from "./http/ws.ts";
+import { KnowledgeStore } from "./integrations/knowledge.ts";
+import { Speech } from "./integrations/speech.ts";
 import { WebSearch } from "./integrations/search.ts";
 import { Transcriber } from "./integrations/transcription.ts";
 import { ProviderRegistry } from "./providers/registry.ts";
@@ -23,14 +25,16 @@ export function createServer(config: Config) {
   const search = new WebSearch(config.env);
   const settings = new Settings(db);
   const accounts = new Accounts(db);
-  const engine = new CouncilEngine({ store, providers, settings, search, obsidianVaultPath: config.obsidianVaultPath, uploadsDir: path.join(config.dataDir, "uploads"), env: config.env });
+  const knowledge = new KnowledgeStore(settings, config.dataDir, { env: config.env });
+  const speech = new Speech(config.env, config.dataDir);
+  const engine = new CouncilEngine({ store, providers, settings, search, knowledge, obsidianVaultPath: config.obsidianVaultPath, uploadsDir: path.join(config.dataDir, "uploads"), env: config.env });
   // A stable secret for signed upload links: from env, else generated once and kept in the database.
   let secret = config.secret ?? settings.get<string>("secret");
   if (!secret) {
     secret = crypto.randomBytes(32).toString("base64url");
     settings.set("secret", secret);
   }
-  const app = createApp({ config, store, engine, providers, search, transcriber: new Transcriber(config.env), accounts, secret });
+  const app = createApp({ config, store, engine, providers, search, transcriber: new Transcriber(config.env), accounts, secret, knowledge, speech });
   const server = config.tls
     ? https.createServer({ cert: fs.readFileSync(config.tls.certPath), key: fs.readFileSync(config.tls.keyPath) }, app)
     : http.createServer(app);
