@@ -75,12 +75,16 @@ export class KnowledgeStore {
       await this.checkUrl(parsed.baseUrl, user.admin);
       const apiKey = clean(request.apiKey, 400) || this.options.env?.ANYTHINGLLM_API_KEY || "";
       if (!apiKey) throw bad("An AnythingLLM API key is needed (create one in AnythingLLM under Settings → Developer API).");
-      entry = { ...base, kind: "anythingllm", name: clean(request.name) || parsed.workspace, detail: `${parsed.workspace} on ${new URL(parsed.baseUrl).host}`, url: parsed.baseUrl, workspace: parsed.workspace, apiKey };
+      let found: any;
       try {
-        await fetchJson(`${parsed.baseUrl}/api/v1/workspace/${encodeURIComponent(parsed.workspace)}`, { method: "GET", label: "anythingllm", timeoutMs: 10_000, headers: { Authorization: `Bearer ${apiKey}` } });
+        found = await fetchJson(`${parsed.baseUrl}/api/v1/workspace/${encodeURIComponent(parsed.workspace)}`, { method: "GET", label: "anythingllm", timeoutMs: 10_000, headers: { Authorization: `Bearer ${apiKey}` } });
       } catch (error) {
-        throw bad(`Couldn't reach that workspace: ${errorMessage(error).slice(0, 160)}`);
+        const message = errorMessage(error);
+        throw bad(/HTTP 40[13]/.test(message) ? "AnythingLLM rejected that API key." : `Couldn't reach AnythingLLM at ${new URL(parsed.baseUrl).host}: ${message.slice(0, 140)}`);
       }
+      const workspace = Array.isArray(found?.workspace) ? found.workspace[0] : found?.workspace;
+      if (!workspace?.slug) throw bad(`AnythingLLM has no workspace called "${parsed.workspace}". Use the name from the workspace's link.`);
+      entry = { ...base, kind: "anythingllm", name: clean(request.name) || clean(workspace.name) || workspace.slug, detail: `${workspace.slug} on ${new URL(parsed.baseUrl).host}`, url: parsed.baseUrl, workspace: workspace.slug, apiKey };
     } else {
       throw bad("Unknown knowledge base type.");
     }
@@ -222,7 +226,9 @@ function toPublic(k: Stored): KnowledgeBase {
   return { id: k.id, name: k.name, kind: k.kind, detail: k.detail, enabled: k.enabled, createdAt: k.createdAt, ...(k.chars ? { chars: k.chars } : {}), ...(k.error ? { error: k.error } : {}) };
 }
 
-function result(base: Stored, snippet: string, part = ""): SearchResult {
+function result(base: Stored, raw: string, part = ""): SearchResult {
+  // AnythingLLM prefixes each chunk with a metadata block the panel doesn't need.
+  const snippet = raw.replace(/<document_metadata>[\s\S]*?<\/document_metadata>\s*/g, "").trim();
   return { title: part && part !== base.name ? `${base.name}: ${part}` : base.name, url: base.kind === "link" ? (base.url ?? "") : "", snippet, source: "knowledge" };
 }
 

@@ -357,7 +357,9 @@ export class CouncilEngine {
             signal,
             onText: draft
           });
-          message = { id: crypto.randomUUID(), author, text, at: new Date().toISOString() };
+          // Models sometimes copy the transcript format and open with their own name.
+          const own = nameOf(speaker, personas).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+          message = { id: crypto.randomUUID(), author, text: text.replace(new RegExp(`^\\s*\\**${own}\\**\\s*:\\s*`, "i"), ""), at: new Date().toISOString() };
         } catch (error) {
           if (signal.aborted) return;
           message = { id: crypto.randomUUID(), author, text: "", error: errorMessage(error), at: new Date().toISOString() };
